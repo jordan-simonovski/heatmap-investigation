@@ -5,7 +5,7 @@ go 1.25
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.43.0
 	github.com/getkin/kin-openapi v0.133.0
-	github.com/go-chi/chi/v5 v5.2.3
+	github.com/go-chi/chi/v5 v5.2.4
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/oapi-codegen/runtime v1.2.0
