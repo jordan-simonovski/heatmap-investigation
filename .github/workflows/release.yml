@@ -58,14 +58,18 @@ jobs:
           GRAFANA_ACCESS_POLICY_TOKEN: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
 
-      - name: Create Version PR (Changesets only)
+      - name: Create Version PR or Publish (Changesets)
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_mode == 'version-only' }}
         id: changesets
         uses: changesets/action@v1
         with:
-          # When pending changesets exist: bump versions and update changelogs.
+          # Pending changesets exist: bump versions and open/update the version PR.
+          # No changesets remain (version PR was merged): run publish.
           version: npm run version-packages
+          publish: npm run publish-plugins
           commit: 'chore: version packages'
           title: 'chore: version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GRAFANA_ACCESS_POLICY_TOKEN: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
