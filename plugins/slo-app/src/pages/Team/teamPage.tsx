@@ -5,7 +5,7 @@ import { locationService } from '@grafana/runtime';
 import { components } from '../../api/generated/types';
 import { prefixRoute } from '../../utils/utils.routing';
 import { routeFor } from '../../constants';
-import { getBurnSeverity, getSeverityWeight } from '../../components/ControlPlane/burnSeverity';
+import { computeActiveRisk } from '../../components/ControlPlane/burnSeverity';
 import { InvestigationCard } from '../../components/Investigation/InvestigationCard';
 
 interface TeamBodyState extends SceneObjectState {
@@ -19,14 +19,7 @@ class TeamBody extends SceneObjectBase<TeamBodyState> {
   static Component = ({ model }: SceneComponentProps<TeamBody>) => {
     const { team, services, slos, burnEvents } = model.useState();
     const [expandedByService, setExpandedByService] = useState<Record<string, boolean>>({});
-    const activeRiskBySlo = new Map<string, number>();
-    for (const burn of burnEvents) {
-      if (burn.eventType === 'burn_resolved') {
-        continue;
-      }
-      const weight = getSeverityWeight(getBurnSeverity(burn.source));
-      activeRiskBySlo.set(burn.sloId, (activeRiskBySlo.get(burn.sloId) ?? 0) + weight);
-    }
+    const activeRiskBySlo = computeActiveRisk(burnEvents);
 
     const teamRisk = slos.reduce((acc, slo) => acc + (activeRiskBySlo.get(slo.id) ?? 0), 0);
     const slosByService = new Map<string, components['schemas']['SLO'][]>();

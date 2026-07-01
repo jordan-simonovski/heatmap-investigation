@@ -2,7 +2,6 @@ export interface RepresentativeTraceRow {
   traceId: string;
   selectedSpanCount: number;
   maxDurationMs: number;
-  errorSpanCount: number;
 }
 
 export function rankRepresentativeTraces(rows: RepresentativeTraceRow[], limit = 10): RepresentativeTraceRow[] {

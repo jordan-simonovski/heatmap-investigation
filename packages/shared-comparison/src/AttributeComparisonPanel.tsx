@@ -14,6 +14,7 @@ import { getBackendSrv } from '@grafana/runtime';
 import { lastValueFrom } from 'rxjs';
 import { HeatmapSelection } from './types';
 import { ComparisonResult, ValueDistribution, computeComparison } from './comparison';
+import { quoteSqlString } from './sqlFilters';
 import { getTopDisplayValues } from './displayValues';
 import { buildFilterClause } from './sqlFilters';
 
@@ -186,7 +187,6 @@ export class AttributeComparisonPanel extends SceneObjectBase<AttributeCompariso
 
     const extra = this.getExtraFilters();
 
-    const quoteSqlString = (v: string) => `'${v.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
     const traceIdFilter =
       sel.traceIds && sel.traceIds.length > 0
         ? `TraceId IN (${sel.traceIds.map(quoteSqlString).join(', ')})`

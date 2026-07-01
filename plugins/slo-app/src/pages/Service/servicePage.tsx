@@ -5,7 +5,7 @@ import { locationService } from '@grafana/runtime';
 import { components } from '../../api/generated/types';
 import { prefixRoute } from '../../utils/utils.routing';
 import { routeFor } from '../../constants';
-import { getBurnSeverity, getSeverityWeight } from '../../components/ControlPlane/burnSeverity';
+import { computeActiveRisk } from '../../components/ControlPlane/burnSeverity';
 import { InvestigationCard } from '../../components/Investigation/InvestigationCard';
 
 interface ServiceBodyState extends SceneObjectState {
@@ -18,14 +18,7 @@ interface ServiceBodyState extends SceneObjectState {
 class ServiceBody extends SceneObjectBase<ServiceBodyState> {
   static Component = ({ model }: SceneComponentProps<ServiceBody>) => {
     const { service, ownerTeam, slos, burnEvents } = model.useState();
-    const riskBySlo = new Map<string, number>();
-    for (const burn of burnEvents) {
-      if (burn.eventType === 'burn_resolved') {
-        continue;
-      }
-      const weight = getSeverityWeight(getBurnSeverity(burn.source));
-      riskBySlo.set(burn.sloId, (riskBySlo.get(burn.sloId) ?? 0) + weight);
-    }
+    const riskBySlo = computeActiveRisk(burnEvents);
     const serviceRisk = slos.reduce((acc, slo) => acc + (riskBySlo.get(slo.id) ?? 0), 0);
     return (
       <Stack direction="column" gap={2}>

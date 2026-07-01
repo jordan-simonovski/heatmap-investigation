@@ -30,13 +30,6 @@ func SetPayloadAttributes(span trace.Span, prefix, payload string) {
 	)
 }
 
-func SetIfNotEmpty(span trace.Span, key, value string) {
-	if value == "" {
-		return
-	}
-	span.SetAttributes(attribute.String(key, value))
-}
-
 func RecordSpanError(span trace.Span, err error) {
 	if err == nil {
 		return

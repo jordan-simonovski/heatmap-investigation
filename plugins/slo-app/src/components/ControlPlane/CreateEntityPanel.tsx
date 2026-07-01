@@ -69,38 +69,17 @@ export function CreateEntityPanel({ apiUrl, teams, services, onRefresh }: Props)
       setServiceSlug('');
       setServiceOwnerTeamId('');
     } else {
-      const objectName = toObjectName(sloName || 'generated-slo');
-      const openslo = [
-        'apiVersion: openslo/v1',
-        'kind: SLO',
-        'metadata:',
-        `  name: ${objectName}`,
-        '  displayName: ' + (sloName || 'Generated SLO'),
-        '  annotations:',
-        `    heatmap.local/userExperience: ${sloUserExperience || sloName || 'Critical user journey'}`,
-        'spec:',
-        `  description: ${sloDescription || 'Protect a critical user experience for this service.'}`,
-        '  service: generated-service',
-        '  budgetingMethod: Occurrences',
-        '  objectives:',
-        `    - target: ${sloTarget}`,
-        '  timeWindow:',
-        `    - duration: ${sloWindowMinutes}m`,
-        '      isRolling: true',
-        '  indicator:',
-        '    metadata:',
-        `      name: ${objectName}-indicator`,
-        '    spec:',
-        '      thresholdMetric:',
-        '        metricSource:',
-        '          type: clickhouse',
-        '          spec:',
-        `            route: ${sloRoute}`,
-        `            type: ${sloType}`,
-        `            threshold: ${sloThreshold}`,
-        `            datasourceUid: ${sloDatasourceUid}`,
-        '            datasourceType: clickhouse',
-      ].join('\n');
+      const openslo = buildOpenSloYaml({
+        name: sloName,
+        userExperience: sloUserExperience,
+        description: sloDescription,
+        target: sloTarget,
+        windowMinutes: sloWindowMinutes,
+        route: sloRoute,
+        type: sloType,
+        threshold: sloThreshold,
+        datasourceUid: sloDatasourceUid,
+      });
 
       await client.createSLO({
         serviceId: sloServiceId,
@@ -227,37 +206,17 @@ export function CreateEntityPanel({ apiUrl, teams, services, onRefresh }: Props)
                     <TextArea
                       rows={6}
                       disabled
-                      value={[
-                        'apiVersion: openslo/v1',
-                        'kind: SLO',
-                        'metadata:',
-                        `  name: ${toObjectName(sloName || 'generated-slo')}`,
-                        '  displayName: ' + (sloName || 'Generated SLO'),
-                        '  annotations:',
-                        `    heatmap.local/userExperience: ${sloUserExperience || sloName || 'Critical user journey'}`,
-                        'spec:',
-                        `  description: ${sloDescription || 'Protect a critical user experience for this service.'}`,
-                        '  service: generated-service',
-                        '  budgetingMethod: Occurrences',
-                        '  objectives:',
-                        `    - target: ${sloTarget}`,
-                        '  timeWindow:',
-                        `    - duration: ${sloWindowMinutes}m`,
-                        '      isRolling: true',
-                        '  indicator:',
-                        '    metadata:',
-                        `      name: ${toObjectName(sloName || 'generated-slo')}-indicator`,
-                        '    spec:',
-                        '      thresholdMetric:',
-                        '        metricSource:',
-                        '          type: clickhouse',
-                        '          spec:',
-                        `            route: ${sloRoute}`,
-                        `            type: ${sloType}`,
-                        `            threshold: ${sloThreshold}`,
-                        `            datasourceUid: ${sloDatasourceUid}`,
-                        '            datasourceType: clickhouse',
-                      ].join('\n')}
+                      value={buildOpenSloYaml({
+                        name: sloName,
+                        userExperience: sloUserExperience,
+                        description: sloDescription,
+                        target: sloTarget,
+                        windowMinutes: sloWindowMinutes,
+                        route: sloRoute,
+                        type: sloType,
+                        threshold: sloThreshold,
+                        datasourceUid: sloDatasourceUid,
+                      })}
                     />
                   </Field>
                 </>
@@ -275,4 +234,51 @@ export function CreateEntityPanel({ apiUrl, teams, services, onRefresh }: Props)
 function toObjectName(input: string): string {
   const normalized = input.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
   return normalized || 'generated-slo';
+}
+
+interface OpenSloFields {
+  name: string;
+  userExperience: string;
+  description: string;
+  target: string;
+  windowMinutes: string;
+  route: string;
+  type: string;
+  threshold: string;
+  datasourceUid: string;
+}
+
+function buildOpenSloYaml(f: OpenSloFields): string {
+  const objectName = toObjectName(f.name || 'generated-slo');
+  return [
+    'apiVersion: openslo/v1',
+    'kind: SLO',
+    'metadata:',
+    `  name: ${objectName}`,
+    '  displayName: ' + (f.name || 'Generated SLO'),
+    '  annotations:',
+    `    heatmap.local/userExperience: ${f.userExperience || f.name || 'Critical user journey'}`,
+    'spec:',
+    `  description: ${f.description || 'Protect a critical user experience for this service.'}`,
+    '  service: generated-service',
+    '  budgetingMethod: Occurrences',
+    '  objectives:',
+    `    - target: ${f.target}`,
+    '  timeWindow:',
+    `    - duration: ${f.windowMinutes}m`,
+    '      isRolling: true',
+    '  indicator:',
+    '    metadata:',
+    `      name: ${objectName}-indicator`,
+    '    spec:',
+    '      thresholdMetric:',
+    '        metricSource:',
+    '          type: clickhouse',
+    '          spec:',
+    `            route: ${f.route}`,
+    `            type: ${f.type}`,
+    `            threshold: ${f.threshold}`,
+    `            datasourceUid: ${f.datasourceUid}`,
+    '            datasourceType: clickhouse',
+  ].join('\n');
 }

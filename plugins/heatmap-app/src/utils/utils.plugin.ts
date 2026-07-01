@@ -9,9 +9,3 @@ export const usePluginProps = () => {
 
   return pluginProps;
 };
-
-export const usePluginMeta = () => {
-  const pluginProps = usePluginProps();
-
-  return pluginProps?.meta;
-};

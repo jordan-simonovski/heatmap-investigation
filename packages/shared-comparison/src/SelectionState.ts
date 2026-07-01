@@ -1,6 +1,7 @@
 import { SceneObjectBase, SceneObjectState, sceneGraph } from '@grafana/scenes';
 import { getAppEvents } from '@grafana/runtime';
 import { HeatmapSelection, HeatmapSelectionClearedEvent, HeatmapSelectionEvent } from './types';
+import { quoteSqlString } from './sqlFilters';
 
 export interface SelectionStateState extends SceneObjectState {
   selection: HeatmapSelection | null;
@@ -36,7 +37,6 @@ export class SelectionState extends SceneObjectBase<SelectionStateState> {
     if (!sel) {
       return '1=0';
     }
-    const quoteSqlString = (v: string) => `'${v.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
     if (sel.traceIds && sel.traceIds.length > 0) {
       return `TraceId IN (${sel.traceIds.map(quoteSqlString).join(', ')})`;
     }

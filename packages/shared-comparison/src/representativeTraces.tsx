@@ -13,6 +13,7 @@ import { getBackendSrv } from '@grafana/runtime';
 import { lastValueFrom } from 'rxjs';
 import { HeatmapSelection } from './types';
 import { rankRepresentativeTraces, RepresentativeTraceRow } from './representativeTraceRanking';
+import { quoteSqlString } from './sqlFilters';
 import { buildFilterClause } from './sqlFilters';
 
 interface RepresentativeTracesState extends SceneObjectState {
@@ -93,7 +94,6 @@ export class RepresentativeTracesPanel extends SceneObjectBase<RepresentativeTra
   private async runQuery(selection: HeatmapSelection) {
     this.setState({ loading: true });
 
-    const quoteSqlString = (v: string) => `'${v.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
     const traceIdFilter =
       selection.traceIds && selection.traceIds.length > 0
         ? `TraceId IN (${selection.traceIds.map(quoteSqlString).join(', ')})`
@@ -164,7 +164,6 @@ export class RepresentativeTracesPanel extends SceneObjectBase<RepresentativeTra
         traceId: String(traceId),
         selectedSpanCount: Number(selectedCounts[idx] ?? 0),
         maxDurationMs: Number(maxDurations[idx] ?? 0),
-        errorSpanCount: 0,
       }));
 
       this.setState({
@@ -208,7 +207,6 @@ export class RepresentativeTracesPanel extends SceneObjectBase<RepresentativeTra
               <span className={styles.traceId}>{row.traceId}</span>
               <span className={styles.metric}>
                 {row.selectedSpanCount} spans
-                {row.errorSpanCount > 0 ? ` | ${row.errorSpanCount} errors` : ''}
                 {row.maxDurationMs > 0 ? ` | max ${row.maxDurationMs.toFixed(1)}ms` : ''}
               </span>
             </button>

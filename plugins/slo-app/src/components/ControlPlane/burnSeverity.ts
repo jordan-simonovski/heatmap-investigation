@@ -1,6 +1,13 @@
 import { BadgeColor } from '@grafana/ui';
+import { components } from '../../api/generated/types';
 
 export type BurnSeverity = 'fast' | 'slow' | 'none';
+
+const SEVERITY_META: Record<BurnSeverity, { label: string; color: BadgeColor; weight: number }> = {
+  fast: { label: 'Fast burn', color: 'red', weight: 3 },
+  slow: { label: 'Slow burn', color: 'orange', weight: 2 },
+  none: { label: 'No burn', color: 'blue', weight: 1 },
+};
 
 export function getBurnSeverity(source: string): BurnSeverity {
   if (source.endsWith(':fast')) {
@@ -12,32 +19,19 @@ export function getBurnSeverity(source: string): BurnSeverity {
   return 'none';
 }
 
-export function getSeverityLabel(severity: BurnSeverity): string {
-  if (severity === 'fast') {
-    return 'Fast burn';
-  }
-  if (severity === 'slow') {
-    return 'Slow burn';
-  }
-  return 'No burn';
-}
+export const getSeverityLabel = (severity: BurnSeverity): string => SEVERITY_META[severity].label;
+export const getSeverityBadgeColor = (severity: BurnSeverity): BadgeColor => SEVERITY_META[severity].color;
+export const getSeverityWeight = (severity: BurnSeverity): number => SEVERITY_META[severity].weight;
 
-export function getSeverityBadgeColor(severity: BurnSeverity): BadgeColor {
-  if (severity === 'fast') {
-    return 'red';
+// Active burn risk per SLO id: sum severity weights of unresolved burn events.
+export function computeActiveRisk(burnEvents: components['schemas']['BurnEvent'][]): Map<string, number> {
+  const risk = new Map<string, number>();
+  for (const burn of burnEvents) {
+    if (burn.eventType === 'burn_resolved') {
+      continue;
+    }
+    const weight = getSeverityWeight(getBurnSeverity(burn.source));
+    risk.set(burn.sloId, (risk.get(burn.sloId) ?? 0) + weight);
   }
-  if (severity === 'slow') {
-    return 'orange';
-  }
-  return 'blue';
-}
-
-export function getSeverityWeight(severity: BurnSeverity): number {
-  if (severity === 'fast') {
-    return 3;
-  }
-  if (severity === 'slow') {
-    return 2;
-  }
-  return 1;
+  return risk;
 }

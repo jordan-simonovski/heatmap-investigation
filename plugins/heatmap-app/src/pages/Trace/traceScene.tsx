@@ -6,11 +6,8 @@ import {
   SceneTimeRange,
   VizPanel,
 } from '@grafana/scenes';
+import { escapeSql } from '@heatmap/shared-comparison';
 import { CLICKHOUSE_DS } from '../../constants';
-
-function escapeSql(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-}
 
 function buildTraceWaterfallSql(traceId: string): string {
   const escapedTraceId = escapeSql(traceId);

@@ -5,7 +5,7 @@ import { locationService } from '@grafana/runtime';
 import { components } from '../../api/generated/types';
 import { prefixRoute } from '../../utils/utils.routing';
 import { ROUTES, routeFor } from '../../constants';
-import { getBurnSeverity, getSeverityWeight } from '../../components/ControlPlane/burnSeverity';
+import { computeActiveRisk } from '../../components/ControlPlane/burnSeverity';
 import { InvestigationCard } from '../../components/Investigation/InvestigationCard';
 
 interface OwnershipBodyState extends SceneObjectState {
@@ -20,7 +20,7 @@ class OwnershipBody extends SceneObjectBase<OwnershipBodyState> {
     const state = model.useState();
     const servicesByTeam = new Map<string, components['schemas']['Service'][]>();
     const slosByService = new Map<string, components['schemas']['SLO'][]>();
-    const activeBurnsBySlo = new Map<string, number>();
+    const activeBurnsBySlo = computeActiveRisk(state.burnEvents);
 
     for (const service of state.services) {
       const list = servicesByTeam.get(service.ownerTeamId) ?? [];
@@ -31,13 +31,6 @@ class OwnershipBody extends SceneObjectBase<OwnershipBodyState> {
       const list = slosByService.get(slo.serviceId) ?? [];
       list.push(slo);
       slosByService.set(slo.serviceId, list);
-    }
-    for (const burn of state.burnEvents) {
-      if (burn.eventType === 'burn_resolved') {
-        continue;
-      }
-      const weight = getSeverityWeight(getBurnSeverity(burn.source));
-      activeBurnsBySlo.set(burn.sloId, (activeBurnsBySlo.get(burn.sloId) ?? 0) + weight);
     }
 
     return (

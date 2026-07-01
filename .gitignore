@@ -6,3 +6,6 @@ plugins/*/node_modules/
 *.log
 trace-generator/bin
 .worktrees/
+__pycache__/
+*.pyc
+.eslintcache
