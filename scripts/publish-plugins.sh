@@ -71,9 +71,14 @@ for PLUGIN in "${PLUGINS[@]}"; do
   else
     SIGN_EXIT=$?
     printf '%s\n' "$SIGN_OUTPUT"
+    # ponytail: Grafana signing isn't idempotent — a 409 means this exact
+    # plugin-id@version is already signed upstream, so there's nothing new to
+    # release. Skip it instead of aborting so a publish spanning mixed
+    # old/new versions still ships the versions that ARE new. Real new
+    # versions never 409; only a re-run over an already-published one does.
     if [[ "$SIGN_OUTPUT" == *"status code 409"* ]]; then
-      echo "    Error: signing conflict for ${PLUGIN_ID} v${VERSION} (HTTP 409)." >&2
-      echo "    Fix: bump the plugin version and verify plugin ID ownership in Grafana Cloud." >&2
+      echo "    Warning: ${PLUGIN_ID} v${VERSION} is already signed upstream (HTTP 409) — skipping." >&2
+      continue
     fi
     exit "$SIGN_EXIT"
   fi
