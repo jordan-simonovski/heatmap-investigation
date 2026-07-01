@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3
+
+### Patch Changes
+
+- [#46](https://github.com/jordan-simonovski/heatmap-investigation/pull/46) [`b5d517d`](https://github.com/jordan-simonovski/heatmap-investigation/commit/b5d517de6841bb7c63ced6b696fbde5ebcc2982c) Thanks [@jordan-simonovski](https://github.com/jordan-simonovski)! - chore: harden the release pipeline — skip already-signed versions (HTTP 409) instead of failing the whole publish, and point changelog links at the renamed repo (heatmap-investigation)
+
 ## 1.0.2
 
 ### Patch Changes
