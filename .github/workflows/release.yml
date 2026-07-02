@@ -43,19 +43,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate secrets
-        run: |
-          if [[ -z "${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}" ]]; then
-            echo "Warning: GRAFANA_ACCESS_POLICY_TOKEN secret is not set." \
-              "Plugin signing will fail if a publish is triggered." >&2
-          fi
-
       - name: Publish plugin artifacts now
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_mode == 'publish-now' }}
         run: npm run publish-plugins
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GRAFANA_ACCESS_POLICY_TOKEN: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+          # Set this repo variable to enable private plugin signing (comma-separated
+          # Grafana instance root URLs). Unset -> unsigned zips are published.
+          GRAFANA_SIGN_ROOT_URLS: ${{ vars.GRAFANA_SIGN_ROOT_URLS }}
           GITHUB_REPOSITORY: ${{ github.repository }}
 
       - name: Create Version PR or Publish (Changesets)
@@ -72,4 +68,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GRAFANA_ACCESS_POLICY_TOKEN: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+          GRAFANA_SIGN_ROOT_URLS: ${{ vars.GRAFANA_SIGN_ROOT_URLS }}
           GITHUB_REPOSITORY: ${{ github.repository }}
