@@ -24,6 +24,32 @@ cd docker && docker compose up --build
 
 Open http://localhost:3000 and navigate to the Heatmap Bubbles App or SLO Analysis App.
 
+## Installing the Plugins
+
+Each plugin is published as a zip on [GitHub Releases](https://github.com/jordan-simonovski/heatmap-investigation/releases), tagged `<plugin-id>-v<version>`. The zips are unsigned, so Grafana must allowlist the plugin IDs.
+
+```bash
+# Download and extract into Grafana's plugin directory
+cd /var/lib/grafana/plugins
+curl -fsSLO https://github.com/jordan-simonovski/heatmap-investigation/releases/download/jordo-heatmap-bubbles-panel-v1.0.3/jordo-heatmap-bubbles-panel-1.0.3.zip
+unzip jordo-heatmap-bubbles-panel-1.0.3.zip && rm jordo-heatmap-bubbles-panel-1.0.3.zip
+```
+
+Then allow the unsigned plugins and restart Grafana — either in `grafana.ini`:
+
+```ini
+[plugins]
+allow_loading_unsigned_plugins = jordo-heatmap-bubbles-panel,jordo-timeseries-selection-panel,jordo-heatmap-bubbles-app,jordo-slo-bubbles-app
+```
+
+or as an environment variable (how `docker/docker-compose.yml` does it):
+
+```bash
+GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=jordo-heatmap-bubbles-panel,jordo-timeseries-selection-panel,jordo-heatmap-bubbles-app,jordo-slo-bubbles-app
+```
+
+Note: unsigned plugins can't be loaded on Grafana Cloud. To run there, sign the zips privately by setting the `GRAFANA_SIGN_ROOT_URLS` repo variable (comma-separated instance root URLs, e.g. `https://myorg.grafana.net`) before the release is published — the release workflow then produces signed zips scoped to those instances.
+
 ## Trace Generator
 
 The trace generator (`trace-generator/main.go`) emits ~50 traces/sec across 6 interconnected services. Each service gets its own TracerProvider so the `ServiceName` column in ClickHouse is populated correctly.
