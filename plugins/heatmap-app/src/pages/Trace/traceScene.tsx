@@ -8,6 +8,7 @@ import {
 } from '@grafana/scenes';
 import { escapeSql } from '@heatmap/shared-comparison';
 import { CLICKHOUSE_DS } from '../../constants';
+import { ErrorInsightsDrawer } from './ErrorInsightsDrawer';
 
 function buildTraceWaterfallSql(traceId: string): string {
   const escapedTraceId = escapeSql(traceId);
@@ -114,14 +115,17 @@ export function traceScene(traceId: string) {
           }),
         }),
         new SceneFlexItem({
-          minHeight: 360,
-          body: new VizPanel({
-            title: 'Error insights',
-            pluginId: 'table',
+          ySizing: 'content',
+          body: new ErrorInsightsDrawer({
+            expanded: false,
             $data: spansQuery,
-            options: {
-              showHeader: true,
-            },
+            panel: new VizPanel({
+              title: 'Error insights',
+              pluginId: 'table',
+              options: {
+                showHeader: true,
+              },
+            }),
           }),
         }),
       ],
