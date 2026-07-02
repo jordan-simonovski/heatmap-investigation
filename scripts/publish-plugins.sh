@@ -30,10 +30,23 @@ write_md5_file() {
   exit 1
 }
 
-# Validate required environment variables
-if [[ -z "${GRAFANA_ACCESS_POLICY_TOKEN:-}" ]]; then
-  echo "Error: GRAFANA_ACCESS_POLICY_TOKEN is not set. Cannot sign Grafana plugins." >&2
-  exit 1
+# Signing mode. These plugin IDs are not registered in the Grafana catalog,
+# so a catalog signature (sign-plugin with no --rootUrls) is always rejected
+# with HTTP 409. The only signature Grafana will grant us is a PRIVATE one,
+# which requires the root URL(s) of the Grafana instance(s) the plugins run on.
+# Set GRAFANA_SIGN_ROOT_URLS (comma-separated) to sign; leave it unset to
+# publish unsigned zips — which is how these plugins are already loaded
+# (GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS in docker-compose).
+SIGNING_ENABLED=false
+if [[ -n "${GRAFANA_SIGN_ROOT_URLS:-}" ]]; then
+  SIGNING_ENABLED=true
+  if [[ -z "${GRAFANA_ACCESS_POLICY_TOKEN:-}" ]]; then
+    echo "Error: GRAFANA_SIGN_ROOT_URLS is set but GRAFANA_ACCESS_POLICY_TOKEN is not. Cannot sign." >&2
+    exit 1
+  fi
+else
+  echo "GRAFANA_SIGN_ROOT_URLS is not set — publishing UNSIGNED plugin zips." >&2
+  echo "Grafana must allowlist them via GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS." >&2
 fi
 
 if [[ -z "${GITHUB_REPOSITORY:-}" ]]; then
@@ -64,23 +77,24 @@ for PLUGIN in "${PLUGINS[@]}"; do
     continue
   fi
 
-  # Sign the plugin dist folder and surface actionable conflict errors.
-  echo "    Signing plugin..."
-  if SIGN_OUTPUT=$(cd "$PLUGIN_DIR" && GRAFANA_ACCESS_POLICY_TOKEN="$GRAFANA_ACCESS_POLICY_TOKEN" npm run sign 2>&1); then
-    printf '%s\n' "$SIGN_OUTPUT"
-  else
-    SIGN_EXIT=$?
-    printf '%s\n' "$SIGN_OUTPUT"
-    # ponytail: Grafana signing isn't idempotent — a 409 means this exact
-    # plugin-id@version is already signed upstream, so there's nothing new to
-    # release. Skip it instead of aborting so a publish spanning mixed
-    # old/new versions still ships the versions that ARE new. Real new
-    # versions never 409; only a re-run over an already-published one does.
-    if [[ "$SIGN_OUTPUT" == *"status code 409"* ]]; then
-      echo "    Warning: ${PLUGIN_ID} v${VERSION} is already signed upstream (HTTP 409) — skipping." >&2
-      continue
+  if [[ "$SIGNING_ENABLED" == "true" ]]; then
+    # Private signature scoped to the configured Grafana instance root URL(s).
+    echo "    Signing plugin (private, rootUrls: ${GRAFANA_SIGN_ROOT_URLS})..."
+    if SIGN_OUTPUT=$(cd "$PLUGIN_DIR" && GRAFANA_ACCESS_POLICY_TOKEN="$GRAFANA_ACCESS_POLICY_TOKEN" \
+        npm run sign -- --rootUrls "$GRAFANA_SIGN_ROOT_URLS" 2>&1); then
+      printf '%s\n' "$SIGN_OUTPUT"
+    else
+      SIGN_EXIT=$?
+      printf '%s\n' "$SIGN_OUTPUT"
+      if [[ "$SIGN_OUTPUT" == *"status code 409"* ]]; then
+        echo "    Error: Grafana rejected the signing request for ${PLUGIN_ID} (HTTP 409)." >&2
+        echo "    Likely causes: plugin ID prefix does not match the Grafana Cloud org slug" >&2
+        echo "    that issued GRAFANA_ACCESS_POLICY_TOKEN, or the ID is owned by another org." >&2
+      fi
+      exit "$SIGN_EXIT"
     fi
-    exit "$SIGN_EXIT"
+  else
+    echo "    Skipping signing (unsigned publish)."
   fi
 
   # Package: rename dist → plugin-id, zip, restore
