@@ -3,7 +3,8 @@
        typecheck lint lint-fix test test-ci e2e \
        build-panel build-timeseries build-app build-slo build-go build-slo-control-plane \
        openapi-generate openapi-lint \
-       logs logs-grafana logs-clickhouse logs-collector logs-generator
+       logs logs-grafana logs-clickhouse logs-collector logs-generator \
+       eval
 
 # ── Install ──────────────────────────────────────────────────────────
 install: ## Install all dependencies (npm + go)
@@ -110,6 +111,10 @@ e2e: ## Run Playwright e2e tests (all plugins)
 	npm run e2e --workspace=plugins/timeseries-selection-panel
 	npm run e2e --workspace=plugins/heatmap-app
 	npm run e2e --workspace=plugins/slo-app
+
+# ── Eval ─────────────────────────────────────────────────────────────
+eval: ## Run the agent-RCA eval matrix (needs `make up` + ANTHROPIC creds). Pass ARGS="--scenario S1 --arm wide-sql --trials 1" for a subset.
+	cd eval && npm run eval -- $(ARGS)
 
 # ── Logs ─────────────────────────────────────────────────────────────
 logs: ## Tail all container logs
