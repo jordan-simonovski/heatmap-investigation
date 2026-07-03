@@ -1,0 +1,326 @@
+[
+  {
+    "id": "S1-pass-1",
+    "scenario_id": "S1",
+    "verdict": {
+      "rca": "Checkout latency is caused by the new-checkout-flow feature flag rollout, isolated to region eu-west-1 — N+1 DB queries under that flag in that region.",
+      "culprit_service": "order-service",
+      "discriminating_attributes": [
+        { "key": "app.feature_flag", "value": "new-checkout-flow" },
+        { "key": "host.region", "value": "eu-west-1" }
+      ]
+    },
+    "expected_pass": true,
+    "note": "Clear pass: both required attributes (flag + region) present with correct values."
+  },
+  {
+    "id": "S1-pass-2-key-style",
+    "scenario_id": "S1",
+    "verdict": {
+      "rca": "The new_checkout_flow flag causes N+1 queries; effect confined to host_region eu-west-1.",
+      "culprit_service": "order-service",
+      "discriminating_attributes": [
+        { "key": "app_feature_flag", "value": "new-checkout-flow" },
+        { "key": "host_region", "value": "eu-west-1" }
+      ]
+    },
+    "expected_pass": true,
+    "note": "Same as S1-pass-1 but with underscored keys (wide/bubble-up style vs pillars style) — pins V13 key-normalization equivalence."
+  },
+  {
+    "id": "S1-fail-region-only",
+    "scenario_id": "S1",
+    "verdict": {
+      "rca": "There is a regional slowdown affecting checkout in eu-west-1.",
+      "culprit_service": "order-service",
+      "discriminating_attributes": [{ "key": "host.region", "value": "eu-west-1" }]
+    },
+    "expected_pass": false,
+    "note": "Region alone, no feature flag. Rubric requires the conjunction (flag is co-necessary, graded on causal/actionability grounds) — region-only is the exact wrong-but-plausible answer V9 warns about."
+  },
+  {
+    "id": "S1-fail-wrong-cause",
+    "scenario_id": "S1",
+    "verdict": {
+      "rca": "The database ran out of disk space, causing slow writes.",
+      "culprit_service": "postgres",
+      "discriminating_attributes": []
+    },
+    "expected_pass": false,
+    "note": "Clear fail: unrelated root cause, wrong service, no discriminators."
+  },
+  {
+    "id": "S2-pass-1",
+    "scenario_id": "S2",
+    "verdict": {
+      "rca": "HTTP 500s on /api/orders are from build-7a3 on the iOS platform.",
+      "culprit_service": "order-service",
+      "discriminating_attributes": [
+        { "key": "app.platform", "value": "ios" },
+        { "key": "app.build_id", "value": "build-7a3" }
+      ]
+    },
+    "expected_pass": true,
+    "note": "Clear pass: build_id and platform both present and correct."
+  },
+  {
+    "id": "S2-boundary-build-only",
+    "scenario_id": "S2",
+    "verdict": {
+      "rca": "The 500s trace back to build build-7a3.",
+      "culprit_service": "order-service",
+      "discriminating_attributes": [{ "key": "app.build_id", "value": "build-7a3" }]
+    },
+    "expected_pass": true,
+    "note": "FIRST-PASS judgment call: rubric text says 'both platform and build_id should appear; identifying build-7a3 is required' — read as build_id being the hard requirement and platform a softer expectation. Needs human review to confirm platform omission shouldn't fail this."
+  },
+  {
+    "id": "S2-fail-platform-only",
+    "scenario_id": "S2",
+    "verdict": {
+      "rca": "This only affects iOS clients.",
+      "culprit_service": "order-service",
+      "discriminating_attributes": [{ "key": "app.platform", "value": "ios" }]
+    },
+    "expected_pass": false,
+    "note": "Platform without the required build_id — does not identify build-7a3, which the rubric calls required."
+  },
+  {
+    "id": "S2-fail-wrong-cause",
+    "scenario_id": "S2",
+    "verdict": {
+      "rca": "A downstream payment provider is rejecting requests.",
+      "culprit_service": "payment-service",
+      "discriminating_attributes": []
+    },
+    "expected_pass": false,
+    "note": "Clear fail: wrong service, wrong mechanism."
+  },
+  {
+    "id": "S3-pass-1",
+    "scenario_id": "S3",
+    "verdict": {
+      "rca": "user-service p99 is elevated only in ap-southeast-1, where the Redis cache call times out and falls back to Postgres.",
+      "culprit_service": "user-service",
+      "discriminating_attributes": [
+        { "key": "host.region", "value": "ap-southeast-1" },
+        { "key": "db.system", "value": "redis" }
+      ]
+    },
+    "expected_pass": true,
+    "note": "Clear pass: region (required locus) + redis-fallback mechanism (required per rubric's literal AND) both present."
+  },
+  {
+    "id": "S3-fail-redis-only",
+    "scenario_id": "S3",
+    "verdict": {
+      "rca": "The Redis dependency is slow, causing the latency.",
+      "culprit_service": "user-service",
+      "discriminating_attributes": [{ "key": "db.system", "value": "redis" }]
+    },
+    "expected_pass": false,
+    "note": "V8 case: redis appears on ~100% of traces (~1.0x lift) and is NOT a valid discriminator without region scoping. This is the strawman answer the V8 rubric fix targets — must fail."
+  },
+  {
+    "id": "S3-boundary-region-only",
+    "scenario_id": "S3",
+    "verdict": {
+      "rca": "The slowdown is isolated to ap-southeast-1.",
+      "culprit_service": "user-service",
+      "discriminating_attributes": [{ "key": "host.region", "value": "ap-southeast-1" }]
+    },
+    "expected_pass": true,
+    "note": "FIRST-PASS judgment call: rubric text is internally ambiguous — one sentence reads as an AND (region AND redis-mechanism required), a later sentence calls region 'the required, recoverable discriminator' and redis merely 'supporting... evidence once ap-southeast-1 is named'. Labeled pass here (region is the hard, recoverable part; redis is supporting) but flagged for human review to resolve the rubric's internal contradiction — may need a rubric wording fix, not just a judge fix."
+  },
+  {
+    "id": "S3-fail-wrong-service",
+    "scenario_id": "S3",
+    "verdict": {
+      "rca": "Order-service checkout is slow due to a feature flag.",
+      "culprit_service": "order-service",
+      "discriminating_attributes": [{ "key": "app.feature_flag", "value": "new-checkout-flow" }]
+    },
+    "expected_pass": false,
+    "note": "Clear fail: entirely different incident (this is S1's answer)."
+  },
+  {
+    "id": "S4-pass-1",
+    "scenario_id": "S4",
+    "verdict": {
+      "rca": "Elasticsearch timeouts on /api/search are confined to tenant-initech under the dark-launch-search flag.",
+      "culprit_service": "search-service",
+      "discriminating_attributes": [
+        { "key": "app.tenant_id", "value": "tenant-initech" },
+        { "key": "app.feature_flag", "value": "dark-launch-search" }
+      ]
+    },
+    "expected_pass": true,
+    "note": "Clear pass: both required attributes present."
+  },
+  {
+    "id": "S4-fail-tenant-only",
+    "scenario_id": "S4",
+    "verdict": {
+      "rca": "This only affects tenant-initech.",
+      "culprit_service": "search-service",
+      "discriminating_attributes": [{ "key": "app.tenant_id", "value": "tenant-initech" }]
+    },
+    "expected_pass": false,
+    "note": "Rubric says 'Both are required' explicitly — tenant without the flag fails."
+  },
+  {
+    "id": "S4-fail-wrong-tenant",
+    "scenario_id": "S4",
+    "verdict": {
+      "rca": "This affects tenant-globex on a dark-launch flag.",
+      "culprit_service": "search-service",
+      "discriminating_attributes": [
+        { "key": "app.tenant_id", "value": "tenant-globex" },
+        { "key": "app.feature_flag", "value": "dark-launch-search" }
+      ]
+    },
+    "expected_pass": false,
+    "note": "Wrong tenant entirely — near-miss on structure but factually wrong value."
+  },
+  {
+    "id": "S5-pass-1",
+    "scenario_id": "S5",
+    "verdict": {
+      "rca": "Intermittent 503s on /api/auth come from a memory leak in build build-7a3, concentrated on pod-abc-7 and pod-abc-8.",
+      "culprit_service": "user-service",
+      "discriminating_attributes": [
+        { "key": "app.build_id", "value": "build-7a3" },
+        { "key": "k8s.pod.name", "value": "pod-abc-7" }
+      ]
+    },
+    "expected_pass": true,
+    "note": "Clear pass: build_id and pod both present."
+  },
+  {
+    "id": "S5-fail-unrelated",
+    "scenario_id": "S5",
+    "verdict": {
+      "rca": "A downstream rate limiter is throttling auth requests randomly.",
+      "culprit_service": "user-service",
+      "discriminating_attributes": []
+    },
+    "expected_pass": false,
+    "note": "Clear fail: no discriminators, wrong mechanism."
+  },
+  {
+    "id": "S5-boundary-pods-ruled-out-build",
+    "scenario_id": "S5",
+    "verdict": {
+      "rca": "The 503s cluster on pod-abc-7 and pod-abc-8 — looks like a pod-level resource issue. Checked the build_id and ruled it out: the affected pods are running a mix of builds, not just build-7a3, so the leak isn't tied to that specific release.",
+      "culprit_service": "user-service",
+      "discriminating_attributes": [{ "key": "k8s.pod.name", "value": "pod-abc-7" }]
+    },
+    "expected_pass": false,
+    "note": "REAL OBSERVED CASE (from a live eval run, pinned per audit V12/D3). Agent correctly found the affected pods but explicitly ruled OUT build-7a3 as a factor. Rubric requires build_id AND pod, so this fails as written — attribute-recall should read 1/2 (pod only), which is the point of adding recall: the binary FAIL hides that half the answer was right. FIRST-PASS: a human should decide whether 'found pod, explicitly (and wrongly) rejected build' deserves anything beyond partial attribute-recall credit."
+  },
+  {
+    "id": "S5-boundary-redis-red-herring",
+    "scenario_id": "S5",
+    "verdict": {
+      "rca": "Redis is slow on user-service, causing the intermittent failures.",
+      "culprit_service": "user-service",
+      "discriminating_attributes": [{ "key": "db.system", "value": "redis" }]
+    },
+    "expected_pass": false,
+    "note": "REAL OBSERVED CASE (from a live eval run, pinned per audit D2/D3). This is S3's ground truth (Redis/ap-southeast-1) misapplied to S5 (build/pod). S5 does emit a slow redis span as a red herring (D2), so an agent that fixates on it lands on the wrong scenario's answer. Correctly FAILS per S5's rubric (no build_id, no pod named) — this is the judge working as intended, not a miscalibration. Pinned here so a future rubric-softening pass doesn't accidentally flip it to a false pass."
+  },
+  {
+    "id": "S6-pass-1",
+    "scenario_id": "S6",
+    "verdict": {
+      "rca": "Checkout 504s are a payment provider timeout isolated to us-west-2.",
+      "culprit_service": "payment-service",
+      "discriminating_attributes": [{ "key": "host.region", "value": "us-west-2" }]
+    },
+    "expected_pass": true,
+    "note": "Clear pass: the single required attribute (region) present and correct."
+  },
+  {
+    "id": "S6-fail-wrong-region",
+    "scenario_id": "S6",
+    "verdict": {
+      "rca": "Checkout 504s are a payment provider timeout isolated to eu-west-1.",
+      "culprit_service": "payment-service",
+      "discriminating_attributes": [{ "key": "host.region", "value": "eu-west-1" }]
+    },
+    "expected_pass": false,
+    "note": "Clear fail: right shape of answer, wrong region value."
+  },
+  {
+    "id": "S7-pass-tenant-only",
+    "scenario_id": "S7",
+    "verdict": {
+      "rca": "Every request for tenant-umbrella has a uniform +150ms overhead across all routes.",
+      "culprit_service": "api-gateway",
+      "discriminating_attributes": [{ "key": "app.tenant_id", "value": "tenant-umbrella" }]
+    },
+    "expected_pass": true,
+    "note": "Rubric: tenant is the required answer (symptom already narrows to 'a single customer'); region is bonus context, not required."
+  },
+  {
+    "id": "S7-pass-tenant-and-region",
+    "scenario_id": "S7",
+    "verdict": {
+      "rca": "tenant-umbrella in eu-west-1 has a uniform +150ms overhead (EU compliance overhead).",
+      "culprit_service": "api-gateway",
+      "discriminating_attributes": [
+        { "key": "app.tenant_id", "value": "tenant-umbrella" },
+        { "key": "host.region", "value": "eu-west-1" }
+      ]
+    },
+    "expected_pass": true,
+    "note": "Clear pass: tenant (required) plus region (bonus) both present."
+  },
+  {
+    "id": "S7-fail-wrong-tenant",
+    "scenario_id": "S7",
+    "verdict": {
+      "rca": "tenant-globex sees a uniform latency overhead.",
+      "culprit_service": "api-gateway",
+      "discriminating_attributes": [{ "key": "app.tenant_id", "value": "tenant-globex" }]
+    },
+    "expected_pass": false,
+    "note": "Clear fail: wrong tenant value."
+  },
+  {
+    "id": "S8-pass-1",
+    "scenario_id": "S8",
+    "verdict": {
+      "rca": "POST /api/products writes are slow for tenant-globex due to a batch import hitting Elasticsearch.",
+      "culprit_service": "search-service",
+      "discriminating_attributes": [
+        { "key": "app.tenant_id", "value": "tenant-globex" },
+        { "key": "http.method", "value": "POST" }
+      ]
+    },
+    "expected_pass": true,
+    "note": "Clear pass: tenant (required) plus method (supporting) both present."
+  },
+  {
+    "id": "S8-boundary-tenant-only",
+    "scenario_id": "S8",
+    "verdict": {
+      "rca": "tenant-globex's product writes are slow due to a batch import hitting Elasticsearch.",
+      "culprit_service": "search-service",
+      "discriminating_attributes": [{ "key": "app.tenant_id", "value": "tenant-globex" }]
+    },
+    "expected_pass": true,
+    "note": "FIRST-PASS judgment call: rubric only explicitly says 'Naming tenant-globex is required' — POST vs read is supporting color, not stated as required. Needs human review."
+  },
+  {
+    "id": "S8-fail-wrong-tenant",
+    "scenario_id": "S8",
+    "verdict": {
+      "rca": "tenant-initech's product writes are slow.",
+      "culprit_service": "search-service",
+      "discriminating_attributes": [{ "key": "app.tenant_id", "value": "tenant-initech" }]
+    },
+    "expected_pass": false,
+    "note": "Clear fail: wrong tenant value."
+  }
+]

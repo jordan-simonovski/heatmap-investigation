@@ -14,6 +14,15 @@ export type CellResult = {
   wallClockMs: number;
   toolCalls: number;
   turns: number;
+  /** V6: the model id the API actually served (from the response), not the requested
+   * alias — records what ran even if an alias like "claude-sonnet-5" repoints later. */
+  resolvedModel: string;
+  /** V16: best-effort SDK-retry counter. The Anthropic SDK auto-retries network/5xx/429
+   * errors transparently inside client.messages.create() but does not expose a per-call
+   * retry count through the public response or a request-scoped hook without overriding
+   * `fetch` at client-construction time (the client is built in index.ts, out of scope
+   * for this change). Hardcoded to 0 until that hook exists — LIMITATION, not a measurement. */
+  retries: number;
 };
 
 export function accumulateUsage(prev: Usage, u: { input_tokens: number; output_tokens: number }): Usage {
@@ -46,6 +55,7 @@ export async function runCell(
   let toolCalls = 0;
   let turns = 0;
   let verdict: Verdict | null = null;
+  let resolvedModel = "";
   const start = nowMs();
 
   while (turns < MAX_TURNS) {
@@ -57,6 +67,7 @@ export async function runCell(
       tools,
       messages,
     });
+    resolvedModel = res.model;
     usage = accumulateUsage(usage, res.usage);
     messages.push({ role: "assistant", content: res.content });
 
@@ -92,5 +103,7 @@ export async function runCell(
     wallClockMs: nowMs() - start,
     toolCalls,
     turns,
+    resolvedModel,
+    retries: 0,
   };
 }

@@ -5,6 +5,10 @@ export const config = {
   judgeModel: env.EVAL_JUDGE_MODEL ?? "claude-opus-4-8",
   trials: Number(env.EVAL_TRIALS ?? 10),
   concurrency: Number(env.EVAL_CONCURRENCY ?? 4),
+  // D3: judge each cell k times and take the majority pass/fail. These models reject
+  // temperature/sampling params (400), so k independent calls rely on natural response
+  // variance rather than temperature to make majority-vote meaningful.
+  judgeSamples: Number(env.EVAL_JUDGE_SAMPLES ?? 3),
   truncateCap: Number(env.EVAL_TRUNCATE_CAP ?? 8000),
   maxTokensPerTurn: Number(env.EVAL_MAX_TOKENS ?? 16000),
   urls: {
