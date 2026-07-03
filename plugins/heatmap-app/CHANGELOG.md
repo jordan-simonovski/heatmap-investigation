@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.0
+
+### Minor Changes
+
+- [#50](https://github.com/jordan-simonovski/heatmap-investigation/pull/50) [`6a5e19a`](https://github.com/jordan-simonovski/heatmap-investigation/commit/6a5e19a6042afd5a76cfc355a9f96b0038bf57ef) Thanks [@jordan-simonovski](https://github.com/jordan-simonovski)! - Made a glowy boi for the error insights panel as a CTA
+
+- [#51](https://github.com/jordan-simonovski/heatmap-investigation/pull/51) [`fe3ed59`](https://github.com/jordan-simonovski/heatmap-investigation/commit/fe3ed59527ef032de6ba865436532398ad70c86b) Thanks [@jordan-simonovski](https://github.com/jordan-simonovski)! - Saturation via wide events: box-select now also answers "was the infra saturated?" —
+  ranked resource cards (p95 during selection vs baseline, straight off raw OTel metric rows
+  in ClickHouse) plus an ambient saturation strip under the heatmap showing one line per
+  service so a single service crossing into saturation is visible before you select. No
+  metrics store, no dashboards, no new services — just query-time SQL over wide events.
+
 ## 1.0.3
 
 ### Patch Changes
