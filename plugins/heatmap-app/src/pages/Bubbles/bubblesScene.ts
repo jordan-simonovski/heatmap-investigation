@@ -20,7 +20,13 @@ import { SelectionState } from '../../components/Bubbles/SelectionState';
 import { AttributeComparisonPanel } from '../../components/Bubbles/AttributeComparisonPanel';
 import { RepresentativeTracesPanel } from '../../components/Bubbles/RepresentativeTracesPanel';
 import { ViewModeControl } from '../../components/Bubbles/ViewModeControl';
-import { InvestigationGuidancePanel, buildFilterClause } from '@heatmap/shared-comparison';
+import {
+  InvestigationGuidancePanel,
+  SaturationPanel,
+  buildFilterClause,
+  buildResourceSeriesSql,
+  buildResourceDetailSql,
+} from '@heatmap/shared-comparison';
 
 export type WorkbenchView = 'explorer' | 'comparisons' | 'evidence';
 
@@ -121,6 +127,34 @@ export function bubblesScene(view: WorkbenchView = 'explorer') {
     heatmapQuery.runQueries();
   }
 
+  const servicesFromVar = (): string[] => {
+    const val = String(serviceVar.state.value ?? '');
+    return val && val !== '$__all' && val !== '%' ? [val] : [];
+  };
+
+  const stripQuery = new SceneQueryRunner({
+    datasource: CLICKHOUSE_DS,
+    queries: [
+      {
+        refId: 'saturationStrip',
+        datasource: CLICKHOUSE_DS,
+        rawSql: buildResourceSeriesSql(servicesFromVar()),
+        format: 1,
+        queryType: 'sql',
+      } as any,
+    ],
+  });
+
+  function refreshStripQuery() {
+    const newSql = buildResourceSeriesSql(servicesFromVar());
+    const current = stripQuery.state.queries[0];
+    if ((current as any).rawSql === newSql) {
+      return;
+    }
+    stripQuery.setState({ queries: [{ ...current, rawSql: newSql }] });
+    stripQuery.runQueries();
+  }
+
   const selectionState = new SelectionState();
   const comparisonPanel = new AttributeComparisonPanel({
     datasource: CLICKHOUSE_DS,
@@ -138,11 +172,51 @@ export function bubblesScene(view: WorkbenchView = 'explorer') {
   representativeTracesPanel.setAdHocVariable(adHocFilters);
   representativeTracesPanel.setServiceVariable(serviceVar);
 
+  const resourceDetailQuery = new SceneQueryRunner({
+    datasource: CLICKHOUSE_DS,
+    queries: [],
+  });
+  const resourceDetailPanel = new VizPanel({
+    title: 'Resource signals',
+    pluginId: 'timeseries',
+    $data: resourceDetailQuery,
+    fieldConfig: { defaults: { min: 0, custom: {} }, overrides: [] } as any,
+    options: { legend: { showLegend: true } } as any,
+  });
+  const resourceDetailSection = new SceneFlexItem({
+    height: 200,
+    isHidden: true,
+    body: resourceDetailPanel,
+  });
+
+  const saturationPanel = new SaturationPanel({
+    datasource: CLICKHOUSE_DS,
+    onViewSignals: (service, pod) => {
+      resourceDetailQuery.setState({
+        queries: [
+          {
+            refId: 'resourceDetail',
+            datasource: CLICKHOUSE_DS,
+            rawSql: buildResourceDetailSql(service, pod),
+            format: 1,
+            queryType: 'sql',
+          } as any,
+        ],
+      });
+      resourceDetailPanel.setState({ title: `Resource signals — ${service} · ${pod}` });
+      resourceDetailSection.setState({ isHidden: false });
+      resourceDetailQuery.runQueries();
+    },
+  });
+  saturationPanel.setServiceVariable(serviceVar);
+  saturationPanel.setAdHocVariable(adHocFilters);
+
   selectionState.addActivationHandler(() => {
     const sub = selectionState.subscribeToState((newState, prevState) => {
       if (newState.selection !== prevState.selection) {
         comparisonPanel.setSelection(newState.selection);
         representativeTracesPanel.setSelection(newState.selection);
+        saturationPanel.setSelection(newState.selection);
       }
     });
     return () => sub.unsubscribe();
@@ -158,6 +232,9 @@ export function bubblesScene(view: WorkbenchView = 'explorer') {
         if (representativeTracesPanel.state.selection) {
           representativeTracesPanel.setSelection(representativeTracesPanel.state.selection);
         }
+        if (saturationPanel.state.selection) {
+          saturationPanel.setSelection(saturationPanel.state.selection);
+        }
       }
     });
     return () => sub.unsubscribe();
@@ -167,11 +244,15 @@ export function bubblesScene(view: WorkbenchView = 'explorer') {
     const sub = serviceVar.subscribeToState((newState, prevState) => {
       if (newState.value !== prevState.value) {
         refreshHeatmapQuery();
+        refreshStripQuery();
         if (comparisonPanel.state.selection) {
           comparisonPanel.setSelection(comparisonPanel.state.selection);
         }
         if (representativeTracesPanel.state.selection) {
           representativeTracesPanel.setSelection(representativeTracesPanel.state.selection);
+        }
+        if (saturationPanel.state.selection) {
+          saturationPanel.setSelection(saturationPanel.state.selection);
         }
       }
     });
@@ -248,12 +329,27 @@ export function bubblesScene(view: WorkbenchView = 'explorer') {
     body: comparisonPanel,
   });
 
+  const stripSection = new SceneFlexItem({
+    height: 90,
+    body: new VizPanel({
+      title: 'Infra saturation (max utilization, in-view services)',
+      pluginId: 'timeseries',
+      $data: stripQuery,
+      fieldConfig: { defaults: { unit: 'percentunit', min: 0, max: 1, custom: {} }, overrides: [] } as any,
+      options: { legend: { showLegend: false } } as any,
+    }),
+  });
+  const saturationSection = new SceneFlexItem({
+    minHeight: 140,
+    body: saturationPanel,
+  });
+
   const orderedSections: SceneFlexItem[] =
     view === 'comparisons'
-      ? [guidanceSection, comparisonSection, heatmapSection, tracesSection]
+      ? [guidanceSection, comparisonSection, heatmapSection, stripSection, tracesSection, saturationSection, resourceDetailSection]
       : view === 'evidence'
-        ? [guidanceSection, tracesSection, comparisonSection, heatmapSection]
-        : [guidanceSection, heatmapSection, tracesSection, comparisonSection];
+        ? [guidanceSection, tracesSection, comparisonSection, heatmapSection, stripSection, saturationSection, resourceDetailSection]
+        : [guidanceSection, heatmapSection, stripSection, tracesSection, comparisonSection, saturationSection, resourceDetailSection];
 
   return new EmbeddedScene({
     $timeRange: timeRange,
