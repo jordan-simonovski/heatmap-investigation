@@ -385,7 +385,7 @@ func pickNormalStatusCode() int {
 
 // ── Trace emission ──────────────────────────────────────────────────
 
-func emitTrace(ctx context.Context, st *serviceTracers, ts time.Time, burnCfg burnProfileConfig) {
+func emitTrace(ctx context.Context, st *serviceTracers, ts time.Time, burnCfg burnProfileConfig, logEmit func(traceAttrs, string)) {
 	a := traceAttrs{
 		route:       pickWeighted(routes),
 		method:      pickWeighted(methods),
@@ -401,18 +401,17 @@ func emitTrace(ctx context.Context, st *serviceTracers, ts time.Time, burnCfg bu
 	sc := detectScenario(a)
 	svc := routeToService(a.route)
 
-	// Attributes placed on every span so comparison view works
-	commonAttrs := []attribute.KeyValue{
-		attribute.String("http.method", a.method),
-		attribute.String("http.route", a.route),
-		attribute.String("user.id", a.uid),
-		attribute.String("app.tenant_id", a.tenant),
-		attribute.String("host.region", a.region),
-		attribute.String("app.build_id", a.buildID),
-		attribute.String("app.platform", a.platform),
-		attribute.String("app.feature_flag", a.featureFlag),
-		attribute.String("k8s.pod.name", a.pod),
+	// Attributes placed on every span so comparison view works. Built from
+	// commonKV (logs.go) so span attrs and log-record attrs stay in lockstep.
+	commonAttrs := make([]attribute.KeyValue, 0, 9)
+	for _, kv := range commonKV(a) {
+		commonAttrs = append(commonAttrs, attribute.String(kv.Key, kv.Val))
 	}
+
+	// Emit the request log record BEFORE any early return, so every request —
+	// including deterministic burn events (504/503) — produces one log record.
+	// This keeps the logs pillar complete for the highest-signal traffic (INV-1).
+	logEmit(a, fmt.Sprintf("%s %s -> %s", a.method, a.route, svc))
 
 	if statusCode, level, ok := deterministicBurnDecision(a.route, burnCfg, rand.Float64()); ok {
 		emitDeterministicBurnTrace(ctx, st, ts, a, commonAttrs, svc, statusCode, level)
@@ -1070,6 +1069,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to start metric emitters: %v", err)
 	}
+	logEmit, logShutdown, err := startLogEmitter(ctx, conn)
+	if err != nil {
+		log.Fatalf("failed to start log emitter: %v", err)
+	}
 	burnCfg := loadBurnProfileConfigFromEnv()
 	log.Printf(
 		"burn profile mode=%s steep=%s@%.4f slow=%s@%.4f",
@@ -1084,6 +1087,7 @@ func main() {
 		defer shutdownCancel()
 		st.shutdown(shutdownCtx)
 		metricsShutdown(shutdownCtx)
+		logShutdown(shutdownCtx)
 	}()
 
 	// Backfill 10 minutes of historical data
@@ -1092,7 +1096,7 @@ func main() {
 	backfillTraces := 50 * 60 * 10 // 50/sec * 600 sec
 	for i := 0; i < backfillTraces; i++ {
 		ts := backfillStart.Add(time.Duration(rand.Int63n(int64(10 * time.Minute))))
-		emitTrace(ctx, st, ts, burnCfg)
+		emitTrace(ctx, st, ts, burnCfg, logEmit)
 	}
 	log.Println("backfill complete, starting live emission...")
 
@@ -1106,7 +1110,7 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			emitTrace(ctx, st, time.Now(), burnCfg)
+			emitTrace(ctx, st, time.Now(), burnCfg, logEmit)
 		case <-sigCh:
 			log.Println("shutting down trace generator...")
 			cancel()

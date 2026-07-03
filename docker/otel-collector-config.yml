@@ -32,6 +32,8 @@ exporters:
     endpoint: http://prometheus:9090/api/v1/write
     resource_to_telemetry_conversion:
       enabled: true
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
 
 connectors:
   spanmetrics:
@@ -59,3 +61,7 @@ service:
       receivers: [otlp, spanmetrics]
       processors: [batch]
       exporters: [clickhouse, prometheusremotewrite]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [clickhouse, otlphttp/loki]
