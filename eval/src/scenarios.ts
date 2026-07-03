@@ -24,7 +24,7 @@ export const scenarios: Scenario[] = [
       { key: "host.region", value: "eu-west-1" },
     ],
     rubric:
-      "PASS if the answer identifies the new-checkout-flow feature flag (the high-cardinality discriminator) as the root cause, ideally scoped to eu-west-1. Region alone is insufficient; naming the feature flag is required.",
+      "PASS only if the answer identifies BOTH the new-checkout-flow feature flag AND region eu-west-1 — the slowdown is isolated to that conjunction (flag and region are each ~100% of the slow selection, i.e. co-necessary; neither is sufficient alone, so 'eu-west-1 regional slowdown' without the flag does not pass). The feature flag is graded as the actionable root cause on CAUSAL grounds, not cardinality grounds: a flag rollout is the thing you would disable or roll back, whereas the region is where the effect is observed. Region alone is insufficient; naming the feature flag (scoped to eu-west-1) is required.",
   },
   {
     id: "S2",
@@ -43,14 +43,14 @@ export const scenarios: Scenario[] = [
     id: "S3",
     symptomPrompt: `Read latency on user-service is elevated (p99 ~650ms) with no rise in error rate, and the slowdown is concentrated in a single geographic region. ${TASK}`,
     groundTruthRca:
-      "p99 ~650ms on user-service in region ap-southeast-1 caused by Redis timeouts falling back to Postgres (db.system redis slow). The root cause is the Redis timeout in ap-southeast-1.",
+      "p99 ~650ms on user-service is isolated to region ap-southeast-1, where the (normally fast) Redis dependency call times out and falls back to Postgres. Region ap-southeast-1 is the root cause locus; the timing-out Redis-to-Postgres fallback is the mechanism.",
     culpritService: "user-service",
     discriminatingAttributes: [
       { key: "host.region", value: "ap-southeast-1" },
       { key: "db.system", value: "redis" },
     ],
     rubric:
-      "PASS if the answer identifies Redis (db.system=redis) timeouts in ap-southeast-1 as the cause. db.system is trace-only; naming Redis as the failing dependency is required.",
+      "PASS if the answer identifies region ap-southeast-1 as the locus of the slowdown AND names the slow cache/Redis dependency (falling back to Postgres) as the mechanism. Region is the required, recoverable discriminator: a fast redis span appears on essentially every user-service trace across all regions (~100% incidence, ~1.0x lift), so 'Redis' alone — without scoping to ap-southeast-1 — is NOT a valid discriminator and does not pass by itself. db.system=redis is graded as supporting mechanism evidence once ap-southeast-1 is named as the locus.",
   },
   {
     id: "S4",
@@ -67,7 +67,7 @@ export const scenarios: Scenario[] = [
   },
   {
     id: "S5",
-    symptomPrompt: `The /api/auth endpoint is throwing intermittent HTTP 503s alongside elevated latency (p99 ~800ms) — the errors come and go rather than being constant. ${TASK}`,
+    symptomPrompt: `The /api/auth endpoint is throwing a burst of intermittent HTTP 503 errors — they arrive in clusters rather than being spread evenly across all traffic, and appear concentrated on a subset of service instances rather than the whole fleet. Overall latency is only mildly elevated; the defining signal is the 503 error burst itself. ${TASK}`,
     groundTruthRca:
       "Intermittent 503s and p99 ~800ms on /api/auth from a memory leak on build build-7a3, concentrated on pods pod-abc-7 and pod-abc-8. The build-7a3 memory leak on those pods is the root cause.",
     culpritService: "user-service",
@@ -100,7 +100,7 @@ export const scenarios: Scenario[] = [
       { key: "host.region", value: "eu-west-1" },
     ],
     rubric:
-      "PASS if the answer identifies tenant-umbrella (the high-cardinality discriminator), ideally scoped to eu-west-1, as the source of the latency overhead.",
+      "PASS if the answer identifies tenant-umbrella as the source of the latency overhead. The symptom already narrows this to 'a single customer', so tenant is the natural required answer; region eu-west-1 is supporting context and is a bonus if included, but naming tenant-umbrella is required regardless.",
   },
   {
     id: "S8",
