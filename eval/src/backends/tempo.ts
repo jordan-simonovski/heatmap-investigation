@@ -9,5 +9,5 @@ export async function traceql(query: string): Promise<string> {
   url.searchParams.set("limit", "20");
   url.searchParams.set("start", `${now - 7200}`);
   url.searchParams.set("end", `${now}`);
-  return safeFetchText("Tempo", url);
+  return safeFetchText("Tempo", url, undefined, 60000);
 }

@@ -51,7 +51,7 @@ async function rankAttributes(input: {
     const col = `SpanAttributes['${escapeSql(key)}']`;
     return `
 SELECT
-  '${key}' AS attr,
+  '${escapeSql(key)}' AS attr,
   ${col} AS value,
   countIf(${pred}) AS sel,
   countIf(NOT (${pred})) AS base,

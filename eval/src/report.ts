@@ -13,6 +13,7 @@ export type Cell = {
   passRate: number;
   n: number;
   nPass: number;
+  nError: number;
   medTokens: number;
   medWallMs: number;
   medToolCalls: number;
@@ -27,13 +28,16 @@ export function aggregate(rows: JudgedResult[]): Cell[] {
   const cells: Cell[] = [];
   for (const [key, rs] of groups) {
     const [arm, scenario] = key.split("/");
-    const passing = rs.filter((r) => r.pass);
+    const errored = rs.filter((r) => r.error);
+    const scored = rs.filter((r) => !r.error);
+    const passing = scored.filter((r) => r.pass);
     cells.push({
       arm,
       scenario,
-      n: rs.length,
+      n: scored.length,
       nPass: passing.length,
-      passRate: rs.length ? passing.length / rs.length : 0,
+      nError: errored.length,
+      passRate: scored.length ? passing.length / scored.length : 0,
       medTokens: median(passing.map((r) => r.usage.inputTokens + r.usage.outputTokens)),
       medWallMs: median(passing.map((r) => r.wallClockMs)),
       medToolCalls: median(passing.map((r) => r.toolCalls)),
@@ -44,11 +48,11 @@ export function aggregate(rows: JudgedResult[]): Cell[] {
 
 export function renderTable(cells: Cell[]): string {
   const header =
-    "| arm | scenario | pass-rate | median tokens | median wall (ms) | median tool-calls |\n" +
-    "|---|---|---|---|---|---|";
+    "| arm | scenario | pass-rate | median tokens | median wall (ms) | median tool-calls | errors |\n" +
+    "|---|---|---|---|---|---|---|";
   const rows = cells.map(
     (c) =>
-      `| ${c.arm} | ${c.scenario} | ${c.nPass}/${c.n} (${(c.passRate * 100).toFixed(0)}%) | ${c.medTokens} | ${c.medWallMs} | ${c.medToolCalls} |`,
+      `| ${c.arm} | ${c.scenario} | ${c.nPass}/${c.n} (${(c.passRate * 100).toFixed(0)}%) | ${c.medTokens} | ${c.medWallMs} | ${c.medToolCalls} | ${c.nError} |`,
   );
   return [header, ...rows].join("\n");
 }

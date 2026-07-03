@@ -9,5 +9,5 @@ export async function logql(query: string): Promise<string> {
   url.searchParams.set("limit", "50");
   url.searchParams.set("start", `${(now - 7200) * 1_000_000_000}`);
   url.searchParams.set("end", `${now * 1_000_000_000}`);
-  return safeFetchText("Loki", url);
+  return safeFetchText("Loki", url, undefined, 60000);
 }

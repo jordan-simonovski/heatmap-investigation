@@ -5,5 +5,5 @@ import { safeFetchText } from "./http.ts";
 export async function promql(query: string): Promise<string> {
   const url = new URL(`${config.urls.prometheus}/api/v1/query`);
   url.searchParams.set("query", query);
-  return safeFetchText("Prometheus", url);
+  return safeFetchText("Prometheus", url, undefined, 60000);
 }

@@ -8,7 +8,7 @@ import type { ArmTools } from "./tools/types.ts";
 import { runCell, type CellResult } from "./runner.ts";
 import { judge } from "./judge.ts";
 
-export type JudgedResult = CellResult & { pass: boolean; judgeReasoning: string };
+export type JudgedResult = CellResult & { pass: boolean; judgeReasoning: string; error: boolean };
 export type MatrixOpts = {
   scenarioIds?: string[];
   armNames?: string[];
@@ -48,7 +48,7 @@ export async function runMatrix(client: Anthropic, opts: MatrixOpts): Promise<Ju
           const j = r.verdict
             ? await judge(cell.scenario, r.verdict, client)
             : { pass: false, reasoning: "no verdict submitted" };
-          return { ...r, pass: j.pass, judgeReasoning: j.reasoning };
+          return { ...r, pass: j.pass, judgeReasoning: j.reasoning, error: false };
         } catch (e) {
           return {
             scenario: cell.scenario.id,
@@ -61,6 +61,7 @@ export async function runMatrix(client: Anthropic, opts: MatrixOpts): Promise<Ju
             turns: 0,
             pass: false,
             judgeReasoning: `cell error: ${String(e)}`,
+            error: true,
           } as JudgedResult;
         }
       }),

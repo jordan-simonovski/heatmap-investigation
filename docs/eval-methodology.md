@@ -22,8 +22,10 @@ Every arm shares an identical system prompt ("you are an SRE performing root-cau
 analysis; investigate with your tools; when confident, call `submit_verdict`"), an
 identical symptom prompt per scenario, the same agent model, the same trial count, and the
 same result-truncation cap. **The only thing that differs between arms is the tool set**
-(this is invariant INV-2, asserted directly in `eval/test/*.test.ts` by diffing the
-constant strings each arm's runner builds around its tools):
+(this is invariant INV-2, held by code structure rather than a runtime diff: `runCell`
+uses one shared `SYSTEM_PROMPT`/model/max-tokens across all arms, and the only per-arm
+input it takes is the tool set — `eval/test/tools.test.ts` asserts that the arms' tool
+sets differ correctly, it does not diff prompt strings):
 
 | Arm | Tools |
 |---|---|
@@ -88,6 +90,12 @@ rubric and ground-truth RCA. The judge is:
 
 `eval/test/judge.test.ts` asserts the blindness guarantee directly by inspecting the
 constructed judge prompt for the absence of arm/efficiency fields.
+
+This blindness is by *label* only: no arm name, tool identifier, or timing data is ever
+placed into the judge prompt, but the agent's free-text `rca` field could still incidentally
+name a tool it used (e.g. "my ClickHouse query showed..."). This is low-impact because the
+judge grades against a tool-agnostic rubric with no notion of which arm "should" win, so an
+incidental tool mention has nothing to bias toward.
 
 ## Pinned versions
 
