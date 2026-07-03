@@ -22,3 +22,5 @@ export {
   buildResourceDetailSql,
 } from './saturationSql';
 export type { MsWindow } from './saturationSql';
+export { SaturationPanel, parseComparisonFrames } from './SaturationPanel';
+export type { SaturationPanelConfig } from './SaturationPanel';
