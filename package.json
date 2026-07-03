@@ -20,7 +20,8 @@
     "plugins/heatmap-panel",
     "plugins/timeseries-selection-panel",
     "plugins/heatmap-app",
-    "plugins/slo-app"
+    "plugins/slo-app",
+    "eval"
   ],
   "overrides": {
     "dompurify": "^3.4.11"
