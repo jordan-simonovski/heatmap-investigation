@@ -13,3 +13,5 @@ export { rankRepresentativeTraces } from './representativeTraceRanking';
 export type { RepresentativeTraceRow } from './representativeTraceRanking';
 export { buildFilterClause, filterExpressionForKey, escapeSql, quoteSqlString } from './sqlFilters';
 export { InvestigationGuidancePanel } from './InvestigationGuidancePanel';
+export { SATURATION_SIGNALS, MIN_SELECTION_SAMPLES, scoreSaturation } from './saturation';
+export type { SaturationSignal, SignalKind, ResourceComparisonRow, SaturationScore } from './saturation';
