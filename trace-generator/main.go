@@ -252,8 +252,7 @@ type traceAttrs struct {
 const (
 	// Keep local dev data mostly healthy so alert calibration can be validated.
 	// High values here quickly force sustained breach conditions for 99% SLOs.
-	scenarioPaymentTimeoutRate      = 0.05
-	scenarioAuthMemoryLeakErrorRate = 0.10
+	scenarioPaymentTimeoutRate = 0.05
 )
 
 type burnProfileMode string
@@ -688,10 +687,16 @@ func emitAuthMemoryLeak(ctx context.Context, st *serviceTracers, ts time.Time, a
 	rootDur := gaussianDuration(800, 200)
 	svcDur := gaussianDuration(700, 180)
 
-	// Intermittent 503 with conservative default for local dev calibration.
+	// Intermittent 503, concentrated inside S5 memory-saturation episodes so
+	// the error burst is time-localized and correlates with the metric signal
+	// (weighted average stays conservative; see metrics.go + main_test.go).
+	errRate := scenarioAuthMemoryLeakErrorRateOffEpisode
+	if s5EpisodeActive(ts) {
+		errRate = scenarioAuthMemoryLeakErrorRateInEpisode
+	}
 	statusCode := 200
 	var errMsg string
-	if rand.Float64() < scenarioAuthMemoryLeakErrorRate {
+	if rand.Float64() < errRate {
 		statusCode = 503
 		errMsg = "service unavailable: GC overhead"
 	}
@@ -1061,6 +1066,10 @@ func main() {
 	}
 
 	st := newServiceTracers(ctx, exporter)
+	metricsShutdown, err := startMetricEmitters(ctx, conn)
+	if err != nil {
+		log.Fatalf("failed to start metric emitters: %v", err)
+	}
 	burnCfg := loadBurnProfileConfigFromEnv()
 	log.Printf(
 		"burn profile mode=%s steep=%s@%.4f slow=%s@%.4f",
@@ -1074,6 +1083,7 @@ func main() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer shutdownCancel()
 		st.shutdown(shutdownCtx)
+		metricsShutdown(shutdownCtx)
 	}()
 
 	// Backfill 10 minutes of historical data

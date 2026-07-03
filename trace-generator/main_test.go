@@ -45,8 +45,13 @@ func TestScenarioErrorRatesAreConservativeForLocalSLOTesting(t *testing.T) {
 	if scenarioPaymentTimeoutRate > 0.10 {
 		t.Fatalf("payment timeout rate too high: %f", scenarioPaymentTimeoutRate)
 	}
-	if scenarioAuthMemoryLeakErrorRate > 0.15 {
-		t.Fatalf("auth memory leak error rate too high: %f", scenarioAuthMemoryLeakErrorRate)
+	// S5 503s are episodic (metrics.go): high inside saturation episodes, near
+	// zero outside. The conservativeness bound applies to the weighted average.
+	duty := float64(s5EpisodeLenMin) / float64(s5EpisodePeriodMin)
+	avg := scenarioAuthMemoryLeakErrorRateInEpisode*duty +
+		scenarioAuthMemoryLeakErrorRateOffEpisode*(1-duty)
+	if avg > 0.15 {
+		t.Fatalf("auth memory leak weighted-average error rate too high: %f", avg)
 	}
 }
 

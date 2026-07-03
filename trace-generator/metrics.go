@@ -6,9 +6,18 @@ package main
 // constants before measuring.
 
 import (
+	"context"
 	"math"
 	"math/rand"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -109,4 +118,58 @@ func metricPods() []podIdentity {
 	}
 	pods = append(pods, podIdentity{"user-service", "pod-abc-7"}, podIdentity{"user-service", "pod-abc-8"})
 	return pods
+}
+
+// ── OTLP gauge emission ─────────────────────────────────────────────
+
+// startMetricEmitters registers observable gauges for every (service, pod)
+// identity and exports them via OTLP every 10s. One MeterProvider per
+// identity so ResourceAttributes carry service.name + k8s.pod.name.
+// Volume: 14 identities x 4 metrics / 10s ≈ 5.6 rows/sec — negligible next
+// to span volume.
+func startMetricEmitters(ctx context.Context, conn *grpc.ClientConn) (func(context.Context), error) {
+	var providers []*sdkmetric.MeterProvider
+
+	for _, p := range metricPods() {
+		p := p
+		exp, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithGRPCConn(conn))
+		if err != nil {
+			return nil, err
+		}
+		res, err := resource.New(ctx,
+			resource.WithAttributes(
+				semconv.ServiceName(p.service),
+				attribute.String("k8s.pod.name", p.pod),
+			),
+		)
+		if err != nil {
+			return nil, err
+		}
+		mp := sdkmetric.NewMeterProvider(
+			sdkmetric.WithResource(res),
+			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exp, sdkmetric.WithInterval(10*time.Second))),
+		)
+		meter := mp.Meter("trace-generator")
+
+		for _, name := range metricNames {
+			name := name
+			g, err := meter.Float64ObservableGauge(name)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := meter.RegisterCallback(func(_ context.Context, o metric.Observer) error {
+				o.ObserveFloat64(g, jitteredSignalValue(p.service, p.pod, name, time.Now()))
+				return nil
+			}, g); err != nil {
+				return nil, err
+			}
+		}
+		providers = append(providers, mp)
+	}
+
+	return func(sctx context.Context) {
+		for _, mp := range providers {
+			_ = mp.Shutdown(sctx)
+		}
+	}, nil
 }
