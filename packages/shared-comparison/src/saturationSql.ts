@@ -29,18 +29,25 @@ function timePredicate(w: MsWindow): string {
   return `TimeUnix >= fromUnixTimestamp64Milli(${Math.floor(w.fromMs)}) AND TimeUnix <= fromUnixTimestamp64Milli(${Math.floor(w.toMs)})`;
 }
 
-/** Ambient strip: max utilization per 15s bucket across the in-view services. Utilization-only — counters are not 0-1 comparable. */
+/**
+ * Ambient strip: max utilization per (15s bucket, service). Long format — one row
+ * per (time, service) — so a Grafana `partitionByValues` transform splits it into
+ * one line per service, keeping the query generic (no hardcoded service list in TS).
+ * Per-service lines are why a global max() no longer hides a single service's spike.
+ * Utilization-only — counters are not 0-1 comparable.
+ */
 export function buildResourceSeriesSql(services: string[], table = DEFAULT_METRICS_TABLE): string {
   const utilization = SATURATION_SIGNALS.filter((s) => s.kind === 'utilization')
     .map((s) => quoted(s.metricName))
     .join(', ');
   return `SELECT
   toStartOfInterval(TimeUnix, INTERVAL 15 SECOND) AS time,
+  ResourceAttributes['service.name'] AS service,
   max(Value) AS saturation
 FROM ${table}
 WHERE $__timeFilter(TimeUnix)
   AND MetricName IN (${utilization})${serviceFilter(services)}
-GROUP BY time
+GROUP BY time, service
 ORDER BY time`;
 }
 

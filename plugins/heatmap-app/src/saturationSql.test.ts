@@ -6,13 +6,18 @@ import {
 } from '../../../packages/shared-comparison/src/saturationSql';
 
 describe('buildResourceSeriesSql', () => {
-  it('aggregates max utilization per bucket with the grafana time macro', () => {
+  it('aggregates max utilization per (bucket, service) — long format for partitionByValues', () => {
     const sql = buildResourceSeriesSql([]);
     expect(sql).toContain('$__timeFilter(TimeUnix)');
     expect(sql).toContain(`FROM ${DEFAULT_METRICS_TABLE}`);
     expect(sql).toContain("'cpu.utilization', 'memory.utilization', 'db.pool.utilization'");
     expect(sql).not.toContain('queue.depth'); // counters are not 0-1 comparable; strip is utilization-only
-    expect(sql).not.toContain("ResourceAttributes['service.name'] IN");
+    // one row per (time, service) so a Grafana partitionByValues transform can split
+    // it into one line per service (no hardcoded service list in TS).
+    expect(sql).toContain("ResourceAttributes['service.name'] AS service");
+    expect(sql).toContain('max(Value) AS saturation');
+    expect(sql).toContain('GROUP BY time, service');
+    expect(sql).not.toContain("ResourceAttributes['service.name'] IN"); // no filter when services empty
   });
 
   it('filters and escapes service names', () => {

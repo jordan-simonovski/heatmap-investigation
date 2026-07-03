@@ -3,6 +3,7 @@ import {
   EmbeddedScene,
   QueryVariable,
   SceneControlsSpacer,
+  SceneDataTransformer,
   SceneFlexItem,
   SceneFlexLayout,
   SceneQueryRunner,
@@ -154,6 +155,19 @@ export function bubblesScene(view: WorkbenchView = 'explorer') {
     stripQuery.setState({ queries: [{ ...current, rawSql: newSql }] });
     stripQuery.runQueries();
   }
+
+  // The query returns one row per (time, service); partitionByValues splits it
+  // into one series per service so each service's saturation is its own line —
+  // a global max() would otherwise let the busiest service hide the others.
+  const stripData = new SceneDataTransformer({
+    $data: stripQuery,
+    transformations: [
+      {
+        id: 'partitionByValues',
+        options: { fields: ['service'], keepFields: false },
+      },
+    ],
+  });
 
   const selectionState = new SelectionState();
   const comparisonPanel = new AttributeComparisonPanel({
@@ -330,20 +344,23 @@ export function bubblesScene(view: WorkbenchView = 'explorer') {
   });
 
   const stripSection = new SceneFlexItem({
-    height: 150,
+    height: 190,
     body: new VizPanel({
-      title: 'Infra saturation (max utilization, in-view services)',
+      title: 'Infra saturation by service (max utilization)',
       pluginId: 'timeseries',
-      $data: stripQuery,
+      $data: stripData,
       // No hard min/max: a fixed 0-100% axis wastes ~85% of the strip on empty
       // space below the pinned line and flattens variation. Auto-range hugs the
       // data band on both ends so spikes are legible; the % axis labels still
       // convey the absolute level.
       fieldConfig: {
-        defaults: { unit: 'percentunit', custom: { fillOpacity: 12, lineWidth: 2, pointSize: 0 } },
+        defaults: { unit: 'percentunit', custom: { fillOpacity: 8, lineWidth: 2, pointSize: 0 } },
         overrides: [],
       } as any,
-      options: { legend: { showLegend: false }, tooltip: { mode: 'multi' } } as any,
+      options: {
+        legend: { showLegend: true, displayMode: 'list', placement: 'bottom' },
+        tooltip: { mode: 'multi', sort: 'desc' },
+      } as any,
     }),
   });
   const saturationSection = new SceneFlexItem({
