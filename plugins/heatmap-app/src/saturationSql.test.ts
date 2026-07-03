@@ -1,9 +1,22 @@
-import {
+// Jest globals imported explicitly: @types/jest is hoisted to repo-root node_modules,
+// outside the scaffold's typeRoots, so tsc can't see ambient describe/it/expect.
+import { describe, expect, it } from '@jest/globals';
+// Import via the package alias (external to tsc's rootDir), NOT a relative source
+// path, to avoid pulling shared-comparison src into heatmap-app's program (TS6059).
+// require after the IntersectionObserver polyfill: the alias's index re-exports a
+// scene object whose LazyLoader touches IntersectionObserver at import time.
+global.IntersectionObserver = class IntersectionObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof IntersectionObserver;
+
+const {
   buildResourceSeriesSql,
   buildSaturationComparisonSql,
   buildResourceDetailSql,
   DEFAULT_METRICS_TABLE,
-} from '../../../packages/shared-comparison/src/saturationSql';
+} = require('@heatmap/shared-comparison') as typeof import('@heatmap/shared-comparison');
 
 describe('buildResourceSeriesSql', () => {
   it('aggregates max utilization per (bucket, service) — long format for partitionByValues', () => {

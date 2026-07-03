@@ -1,3 +1,6 @@
+// Jest globals imported explicitly: @types/jest is hoisted to repo-root node_modules,
+// outside the scaffold's typeRoots, so tsc can't see ambient describe/it/expect.
+import { describe, expect, it } from '@jest/globals';
 // SaturationPanel.tsx imports @grafana/scenes, whose LazyLoader touches
 // IntersectionObserver at import time — polyfill it before requiring the module.
 // require (not import) keeps this ordering: ES imports are hoisted, require is not

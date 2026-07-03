@@ -1,8 +1,22 @@
-import {
-  scoreSaturation,
-  SATURATION_SIGNALS,
-  ResourceComparisonRow,
-} from '../../../packages/shared-comparison/src/saturation';
+// Import via the package alias (external to tsc's rootDir), NOT a relative source
+// path: a relative import pulls shared-comparison src into heatmap-app's program
+// (TS6059). require after the IntersectionObserver polyfill because the alias's
+// index re-exports a scene object whose LazyLoader touches IntersectionObserver at
+// import time (house pattern, see saturationParse.test.ts / filterSemantics.test.js).
+// Jest globals imported explicitly: @types/jest is hoisted to the repo-root
+// node_modules, which the scaffold's typeRoots (../node_modules/@types) doesn't
+// cover, so tsc can't see ambient describe/it/expect in a .test.ts.
+import { describe, expect, it } from '@jest/globals';
+import type { ResourceComparisonRow } from '@heatmap/shared-comparison';
+
+global.IntersectionObserver = class IntersectionObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof IntersectionObserver;
+
+const { scoreSaturation, SATURATION_SIGNALS } =
+  require('@heatmap/shared-comparison') as typeof import('@heatmap/shared-comparison');
 
 const row = (over: Partial<ResourceComparisonRow>): ResourceComparisonRow => ({
   service: 'user-service',
