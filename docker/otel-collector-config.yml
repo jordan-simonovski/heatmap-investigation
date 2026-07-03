@@ -18,11 +18,11 @@ exporters:
     traces_table_name: otel_traces
     logs_table_name: otel_logs
     # Metrics use the exporter's default per-type table names (otel_metrics_gauge,
-    # otel_metrics_sum, ...). The collector image is unpinned (:latest in docker-compose.yml);
-    # verified running version is contrib 0.155.0, whose clickhouseexporter dropped the old
-    # `metrics_table_name` prefix key in favour of a `metrics_tables:` block — its defaults
-    # already produce otel_metrics_gauge, so no override. Re-verify the exporter version and
-    # keys if this tag drifts (campaign P1 step 1).
+    # otel_metrics_sum, ...). Collector image is pinned to contrib 0.155.0
+    # (docker-compose.yml), whose clickhouseexporter dropped the old `metrics_table_name`
+    # prefix key in favour of a `metrics_tables:` block — its defaults already produce
+    # otel_metrics_gauge, so no override. Re-verify the exporter version and keys if the
+    # pinned tag is bumped (campaign P1 step 1).
     create_schema: true
 
 service:

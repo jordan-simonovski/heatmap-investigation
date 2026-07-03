@@ -38,7 +38,9 @@ services:
       - heatmap
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
+    # Pinned: the clickhouseexporter metrics config (metrics_tables block, default
+    # otel_metrics_* table names) is verified against 0.155.0. Bump deliberately.
+    image: otel/opentelemetry-collector-contrib:0.155.0
     container_name: otel-collector
     command: ["--config=/etc/otel-collector-config.yml"]
     volumes:
