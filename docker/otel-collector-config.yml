@@ -24,14 +24,38 @@ exporters:
     # otel_metrics_gauge, so no override. Re-verify the exporter version and keys if the
     # pinned tag is bumped (campaign P1 step 1).
     create_schema: true
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+    resource_to_telemetry_conversion:
+      enabled: true
+
+connectors:
+  spanmetrics:
+    histogram:
+      explicit:
+        buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s]
+    # status.code is intentionally NOT listed here: spanmetricsconnector 0.155.0
+    # treats it as a reserved default dimension (always emitted as the
+    # `status_code` label from span.Status().Code()) and fails config validation
+    # ("duplicate dimension name") if it's also listed under dimensions. The
+    # INV-1 label set (http_route/host_region/status_code) still ends up on
+    # every series — verified in task-2-report.md.
+    dimensions:
+      - name: http.route
+      - name: host.region
+    metrics_flush_interval: 15s
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [clickhouse]
+      exporters: [clickhouse, otlp/tempo, spanmetrics]
     metrics:
-      receivers: [otlp]
+      receivers: [otlp, spanmetrics]
       processors: [batch]
-      exporters: [clickhouse]
+      exporters: [clickhouse, prometheusremotewrite]
