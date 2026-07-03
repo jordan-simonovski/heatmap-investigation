@@ -330,13 +330,20 @@ export function bubblesScene(view: WorkbenchView = 'explorer') {
   });
 
   const stripSection = new SceneFlexItem({
-    height: 90,
+    height: 150,
     body: new VizPanel({
       title: 'Infra saturation (max utilization, in-view services)',
       pluginId: 'timeseries',
       $data: stripQuery,
-      fieldConfig: { defaults: { unit: 'percentunit', min: 0, max: 1, custom: {} }, overrides: [] } as any,
-      options: { legend: { showLegend: false } } as any,
+      // No hard min/max: a fixed 0-100% axis wastes ~85% of the strip on empty
+      // space below the pinned line and flattens variation. Auto-range hugs the
+      // data band on both ends so spikes are legible; the % axis labels still
+      // convey the absolute level.
+      fieldConfig: {
+        defaults: { unit: 'percentunit', custom: { fillOpacity: 12, lineWidth: 2, pointSize: 0 } },
+        overrides: [],
+      } as any,
+      options: { legend: { showLegend: false }, tooltip: { mode: 'multi' } } as any,
     }),
   });
   const saturationSection = new SceneFlexItem({
