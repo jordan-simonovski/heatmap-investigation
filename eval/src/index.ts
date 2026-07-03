@@ -19,6 +19,22 @@ async function main() {
   const concurrency = flag("concurrency") ? Number(flag("concurrency")) : undefined;
   const raw = hasFlag("raw");
 
+  // Pre-flight auth check — a single shared client is created here, so auth is
+  // all-or-nothing. Announce what the PROCESS sees (masked) and fail fast if it
+  // has no credential, rather than churning the whole matrix into auth errors.
+  // (Checks env vars; does not detect `ant`/OAuth-profile credentials.)
+  const hasKey = !!process.env.ANTHROPIC_API_KEY;
+  const hasToken = !!process.env.ANTHROPIC_AUTH_TOKEN;
+  console.error(`auth (this process): ANTHROPIC_API_KEY=${hasKey ? "set" : "UNSET"}, ANTHROPIC_AUTH_TOKEN=${hasToken ? "set" : "UNSET"}`);
+  if (!hasKey && !hasToken) {
+    console.error(
+      "No Anthropic credential in THIS process's environment — the eval cannot authenticate.\n" +
+        "Export ANTHROPIC_API_KEY in the SAME shell that runs the eval (the one where the 120-run succeeded), or run it inline:\n" +
+        '  ANTHROPIC_API_KEY=sk-ant-... make eval ARGS="--scenario S5 --trials 5 --raw"',
+    );
+    process.exit(1);
+  }
+
   const client = new Anthropic();
   console.error(
     `Running matrix: agent=${config.agentModel} judge=${config.judgeModel} ` +

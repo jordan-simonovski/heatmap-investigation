@@ -3,7 +3,7 @@ const env = process.env;
 export const config = {
   agentModel: env.EVAL_AGENT_MODEL ?? "claude-sonnet-5",
   judgeModel: env.EVAL_JUDGE_MODEL ?? "claude-opus-4-8",
-  trials: Number(env.EVAL_TRIALS ?? 5),
+  trials: Number(env.EVAL_TRIALS ?? 10),
   concurrency: Number(env.EVAL_CONCURRENCY ?? 4),
   truncateCap: Number(env.EVAL_TRUNCATE_CAP ?? 8000),
   maxTokensPerTurn: Number(env.EVAL_MAX_TOKENS ?? 16000),
