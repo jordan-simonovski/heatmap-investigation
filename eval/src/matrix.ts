@@ -8,7 +8,16 @@ import type { ArmTools } from "./tools/types.ts";
 import { runCell, type CellResult } from "./runner.ts";
 import { judge } from "./judge.ts";
 
-export type JudgedResult = CellResult & { pass: boolean; judgeReasoning: string; error: boolean };
+export type JudgedResult = CellResult & {
+  pass: boolean;
+  judgeReasoning: string;
+  error: boolean;
+  /** V12: fraction of the scenario's required discriminating attributes the judge majority
+   * agreed the candidate identified (0 when the scenario has no discriminating attributes,
+   * e.g. never — S6 has one). Reported alongside the binary pass, not instead of it. */
+  attributeRecall: number;
+  identifiedAttributes: string[];
+};
 export type MatrixOpts = {
   scenarioIds?: string[];
   armNames?: string[];
@@ -47,8 +56,17 @@ export async function runMatrix(client: Anthropic, opts: MatrixOpts): Promise<Ju
           const r = await runCell(cell.scenario, cell.arm, cell.trial, client, () => Date.now());
           const j = r.verdict
             ? await judge(cell.scenario, r.verdict, client)
-            : { pass: false, reasoning: "no verdict submitted" };
-          return { ...r, pass: j.pass, judgeReasoning: j.reasoning, error: false };
+            : { pass: false, reasoning: "no verdict submitted", identifiedAttributes: [] as string[], votes: [] };
+          const required = cell.scenario.discriminatingAttributes.length;
+          const attributeRecall = required ? j.identifiedAttributes.length / required : 0;
+          return {
+            ...r,
+            pass: j.pass,
+            judgeReasoning: j.reasoning,
+            error: false,
+            attributeRecall,
+            identifiedAttributes: j.identifiedAttributes,
+          };
         } catch (e) {
           return {
             scenario: cell.scenario.id,
@@ -59,9 +77,13 @@ export async function runMatrix(client: Anthropic, opts: MatrixOpts): Promise<Ju
             wallClockMs: 0,
             toolCalls: 0,
             turns: 0,
+            resolvedModel: "",
+            retries: 0,
             pass: false,
             judgeReasoning: `cell error: ${String(e)}`,
             error: true,
+            attributeRecall: 0,
+            identifiedAttributes: [],
           } as JudgedResult;
         }
       }),

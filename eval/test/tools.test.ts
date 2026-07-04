@@ -16,8 +16,29 @@ test("each arm exposes definitions with matching handlers", () => {
 
 test("arms differ only in tools, pillars has no SQL", () => {
   const pillarNames = pillarsArm.definitions.map((d) => d.name);
-  assert.deepEqual(pillarNames.sort(), ["loki_logql", "promql", "traceql"]);
+  assert.deepEqual(
+    pillarNames.sort(),
+    ["get_trace", "loki_logql", "promql", "traceql", "traceql_metrics"],
+  );
   assert.ok(!pillarNames.includes("clickhouse_sql"));
+});
+
+test("pillars traceql/loki tools expose an agent-adjustable limit (V5)", () => {
+  const traceqlDef = pillarsArm.definitions.find((d) => d.name === "traceql")!;
+  const lokiDef = pillarsArm.definitions.find((d) => d.name === "loki_logql")!;
+  assert.ok("limit" in (traceqlDef.input_schema.properties as object), "traceql exposes limit");
+  assert.ok("limit" in (lokiDef.input_schema.properties as object), "loki_logql exposes limit");
+});
+
+test("get_trace requires a trace_id", () => {
+  const def = pillarsArm.definitions.find((d) => d.name === "get_trace")!;
+  assert.deepEqual(def.input_schema.required, ["trace_id"]);
+});
+
+test("traceql_metrics description steers the agent to span. scope, not resource.", () => {
+  const def = pillarsArm.definitions.find((d) => d.name === "traceql_metrics")!;
+  assert.match(def.description!, /span\./);
+  assert.match(def.description!, /resource\./);
 });
 
 test("submit_verdict requires the three verdict fields", () => {

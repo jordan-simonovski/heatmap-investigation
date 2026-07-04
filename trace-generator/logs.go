@@ -36,20 +36,28 @@ func commonKV(a traceAttrs) []struct{ Key, Val string } {
 }
 
 // logAttrs mirrors the span commonAttrs key set onto a log record, built from
-// commonKV so it stays in lockstep with the span attributes.
-func logAttrs(a traceAttrs) []otellog.KeyValue {
+// commonKV so it stays in lockstep with the span attributes, plus the
+// request's actual HTTP status code (V1 fix: the logs pillar must be able to
+// filter/aggregate on failure, the same way the span attribute does).
+func logAttrs(a traceAttrs, statusCode int) []otellog.KeyValue {
 	kvs := commonKV(a)
-	out := make([]otellog.KeyValue, 0, len(kvs))
+	out := make([]otellog.KeyValue, 0, len(kvs)+1)
 	for _, kv := range kvs {
 		out = append(out, otellog.String(kv.Key, kv.Val))
 	}
+	out = append(out, otellog.Int("http.status_code", statusCode))
 	return out
 }
 
 // startLogEmitter builds an OTLP log exporter over the shared gRPC conn and
 // returns emit + shutdown funcs. Resource ServiceName is fixed; per-request
 // service is not needed for the logs pillar (route disambiguates).
-func startLogEmitter(ctx context.Context, conn *grpc.ClientConn) (func(traceAttrs, string), func(context.Context), error) {
+//
+// emit takes the request's REAL HTTP status code (decided by the
+// scenario/burn emitter in main.go, not guessed here) so the log record
+// reflects what actually happened: severity is Error for 4xx/5xx, Info
+// otherwise, and http.status_code is always present as an attribute (V1 fix).
+func startLogEmitter(ctx context.Context, conn *grpc.ClientConn) (func(traceAttrs, string, int), func(context.Context), error) {
 	exp, err := otlploggrpc.New(ctx, otlploggrpc.WithGRPCConn(conn))
 	if err != nil {
 		return nil, nil, err
@@ -63,11 +71,17 @@ func startLogEmitter(ctx context.Context, conn *grpc.ClientConn) (func(traceAttr
 	)
 	logger := lp.Logger("trace-generator")
 
-	emit := func(a traceAttrs, body string) {
+	emit := func(a traceAttrs, body string, statusCode int) {
 		var rec otellog.Record
-		rec.SetSeverity(otellog.SeverityInfo)
+		if statusCode >= 400 {
+			rec.SetSeverity(otellog.SeverityError)
+			rec.SetSeverityText("Error")
+		} else {
+			rec.SetSeverity(otellog.SeverityInfo)
+			rec.SetSeverityText("Info")
+		}
 		rec.SetBody(otellog.StringValue(body))
-		rec.AddAttributes(logAttrs(a)...)
+		rec.AddAttributes(logAttrs(a, statusCode)...)
 		logger.Emit(ctx, rec)
 	}
 	shutdown := func(c context.Context) { _ = lp.Shutdown(c) }

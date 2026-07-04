@@ -14,5 +14,6 @@ test("buildCells produces scenario x arm x trial", () => {
 
 test("buildCells defaults to full matrix", () => {
   const cells = buildCells({});
-  assert.equal(cells.length, 8 * 3 * 5); // 120
+  // trials default is 10 (see config.ts / d0f65ca); was 5 when this assertion was written.
+  assert.equal(cells.length, 8 * 3 * 10); // 240
 });

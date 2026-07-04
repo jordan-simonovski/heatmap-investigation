@@ -18,3 +18,31 @@ storage:
       path: /var/tempo/blocks
     wal:
       path: /var/tempo/wal
+
+# D1 fix: enable the metrics-generator so TraceQL aggregation
+# ({...} | count_over_time() by (...), rate(), etc.) can run server-side
+# instead of the pillars agent paging raw traces. The local-blocks processor
+# is what serves TraceQL metrics queries against recent (not-yet-flushed)
+# data; span-metrics/service-graphs additionally push to Prometheus via
+# remote_write for the metrics pillar. filter_server_spans is disabled
+# because this generator's root spans (api-gateway, SERVER kind) carry the
+# http.route / http.status_code attributes the eval queries filter on.
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+  storage:
+    path: /var/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+  traces_storage:
+    path: /var/tempo/generator/traces
+  processor:
+    local_blocks:
+      filter_server_spans: false
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [service-graphs, span-metrics, local-blocks]

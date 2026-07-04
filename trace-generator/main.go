@@ -17,7 +17,7 @@ Backfills 10 minutes of history on startup, then streams live.
 | S3 | Redis Timeout (APAC)          | user-svc routes, region=ap-southeast-1                               | p99 ~650ms, redis slow + pg fallback | region, db.system               |
 | S4 | Initech Search Fail (Tenant)  | tenant=tenant-initech, flag=dark-launch-search, route=/api/search    | HTTP 500, ES timeout ~3s             | tenant_id, feature_flag         |
 | S5 | Auth Memory Leak (Build+Pod)  | route=/api/auth, build=build-7a3, pod=pod-abc-{7,8}                  | p99 ~800ms, intermittent 503         | build_id, k8s.pod.name          |
-| S6 | Payment Timeout (Region)      | route=/cart/checkout, region=us-west-2, 30% prob                     | HTTP 504, ~5s timeout                | region                          |
+| S6 | Payment Timeout (Region)      | route=/cart/checkout, region=us-west-2, ~5% prob                     | HTTP 504, ~5s timeout                | region                          |
 | S7 | Umbrella EU Compliance        | tenant=tenant-umbrella, region=eu-west-1                             | +150ms overhead, all routes          | tenant_id, region               |
 | S8 | Globex Batch Import           | tenant=tenant-globex, route=/api/products, method=POST               | Slow ES ~500ms                       | tenant_id, http.method          |
 */
@@ -385,7 +385,7 @@ func pickNormalStatusCode() int {
 
 // ── Trace emission ──────────────────────────────────────────────────
 
-func emitTrace(ctx context.Context, st *serviceTracers, ts time.Time, burnCfg burnProfileConfig, logEmit func(traceAttrs, string)) {
+func emitTrace(ctx context.Context, st *serviceTracers, ts time.Time, burnCfg burnProfileConfig, logEmit func(traceAttrs, string, int)) {
 	a := traceAttrs{
 		route:       pickWeighted(routes),
 		method:      pickWeighted(methods),
@@ -408,36 +408,40 @@ func emitTrace(ctx context.Context, st *serviceTracers, ts time.Time, burnCfg bu
 		commonAttrs = append(commonAttrs, attribute.String(kv.Key, kv.Val))
 	}
 
-	// Emit the request log record BEFORE any early return, so every request —
-	// including deterministic burn events (504/503) — produces one log record.
-	// This keeps the logs pillar complete for the highest-signal traffic (INV-1).
-	logEmit(a, fmt.Sprintf("%s %s -> %s", a.method, a.route, svc))
-
-	if statusCode, level, ok := deterministicBurnDecision(a.route, burnCfg, rand.Float64()); ok {
+	// Dispatch to the scenario/burn emitter FIRST so we know the request's
+	// REAL HTTP status, then emit exactly one log record carrying it (V1 fix:
+	// previously the log was emitted here as a fixed SeverityInfo line before
+	// the status was decided, making the logs pillar status-blind). Every
+	// request — including deterministic burn events (504/503) — still
+	// produces one log record (INV-1), it's just emitted after dispatch.
+	var statusCode int
+	if bStatus, level, ok := deterministicBurnDecision(a.route, burnCfg, rand.Float64()); ok {
+		statusCode = bStatus
 		emitDeterministicBurnTrace(ctx, st, ts, a, commonAttrs, svc, statusCode, level)
-		return
+	} else {
+		switch sc {
+		case scenarioSlowCheckout:
+			statusCode = emitSlowCheckout(ctx, st, ts, a, commonAttrs)
+		case scenarioIOSOrderErrors:
+			statusCode = emitIOSOrderErrors(ctx, st, ts, a, commonAttrs)
+		case scenarioRedisTimeoutAPAC:
+			statusCode = emitRedisTimeoutAPAC(ctx, st, ts, a, commonAttrs, svc)
+		case scenarioInitechSearch:
+			statusCode = emitInitechSearch(ctx, st, ts, a, commonAttrs)
+		case scenarioAuthMemoryLeak:
+			statusCode = emitAuthMemoryLeak(ctx, st, ts, a, commonAttrs)
+		case scenarioPaymentTimeout:
+			statusCode = emitPaymentTimeout(ctx, st, ts, a, commonAttrs)
+		case scenarioUmbrellaCompliance:
+			statusCode = emitUmbrellaCompliance(ctx, st, ts, a, commonAttrs, svc)
+		case scenarioGlobexBatch:
+			statusCode = emitGlobexBatch(ctx, st, ts, a, commonAttrs)
+		default:
+			statusCode = emitNormalTrace(ctx, st, ts, a, commonAttrs, svc)
+		}
 	}
 
-	switch sc {
-	case scenarioSlowCheckout:
-		emitSlowCheckout(ctx, st, ts, a, commonAttrs)
-	case scenarioIOSOrderErrors:
-		emitIOSOrderErrors(ctx, st, ts, a, commonAttrs)
-	case scenarioRedisTimeoutAPAC:
-		emitRedisTimeoutAPAC(ctx, st, ts, a, commonAttrs, svc)
-	case scenarioInitechSearch:
-		emitInitechSearch(ctx, st, ts, a, commonAttrs)
-	case scenarioAuthMemoryLeak:
-		emitAuthMemoryLeak(ctx, st, ts, a, commonAttrs)
-	case scenarioPaymentTimeout:
-		emitPaymentTimeout(ctx, st, ts, a, commonAttrs)
-	case scenarioUmbrellaCompliance:
-		emitUmbrellaCompliance(ctx, st, ts, a, commonAttrs, svc)
-	case scenarioGlobexBatch:
-		emitGlobexBatch(ctx, st, ts, a, commonAttrs)
-	default:
-		emitNormalTrace(ctx, st, ts, a, commonAttrs, svc)
-	}
+	logEmit(a, fmt.Sprintf("%s %s -> %s", a.method, a.route, svc), statusCode)
 }
 
 func emitDeterministicBurnTrace(
@@ -485,7 +489,7 @@ func emitDeterministicBurnTrace(
 
 // ── S1: Slow Checkout — feature flag + EU, N+1 queries ──────────────
 
-func emitSlowCheckout(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue) {
+func emitSlowCheckout(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue) int {
 	rootDur := gaussianDuration(1500, 400)
 	svcDur := gaussianDuration(1200, 350)
 	payDur := gaussianDuration(200, 50)
@@ -550,11 +554,12 @@ func emitSlowCheckout(ctx context.Context, st *serviceTracers, ts time.Time, a t
 
 	svcSpan.End(trace.WithTimestamp(svcStart.Add(svcDur)))
 	rootSpan.End(trace.WithTimestamp(ts.Add(rootDur)))
+	return 200
 }
 
 // ── S2: iOS Order Errors — bad build parse regression ───────────────
 
-func emitIOSOrderErrors(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue) {
+func emitIOSOrderErrors(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue) int {
 	rootDur := gaussianDuration(250, 60)
 	svcDur := gaussianDuration(100, 30)
 
@@ -577,11 +582,12 @@ func emitIOSOrderErrors(ctx context.Context, st *serviceTracers, ts time.Time, a
 	markSpanError(svcSpan, "ValidationError", "malformed request body")
 	svcSpan.End(trace.WithTimestamp(svcStart.Add(svcDur)))
 	rootSpan.End(trace.WithTimestamp(ts.Add(rootDur)))
+	return 500
 }
 
 // ── S3: Redis Timeout APAC ──────────────────────────────────────────
 
-func emitRedisTimeoutAPAC(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue, svc string) {
+func emitRedisTimeoutAPAC(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue, svc string) int {
 	rootDur := gaussianDuration(650, 120)
 	svcDur := gaussianDuration(580, 100)
 
@@ -634,11 +640,12 @@ func emitRedisTimeoutAPAC(ctx context.Context, st *serviceTracers, ts time.Time,
 
 	svcSpan.End(trace.WithTimestamp(svcStart.Add(svcDur)))
 	rootSpan.End(trace.WithTimestamp(ts.Add(rootDur)))
+	return 200
 }
 
 // ── S4: Initech Search Failure — tenant + dark-launch flag ──────────
 
-func emitInitechSearch(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue) {
+func emitInitechSearch(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue) int {
 	rootDur := gaussianDuration(3000, 500)
 	svcDur := gaussianDuration(2800, 450)
 
@@ -678,11 +685,12 @@ func emitInitechSearch(ctx context.Context, st *serviceTracers, ts time.Time, a 
 
 	svcSpan.End(trace.WithTimestamp(svcStart.Add(svcDur)))
 	rootSpan.End(trace.WithTimestamp(ts.Add(rootDur)))
+	return 500
 }
 
 // ── S5: Auth Memory Leak — build + pod, GC backpressure ─────────────
 
-func emitAuthMemoryLeak(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue) {
+func emitAuthMemoryLeak(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue) int {
 	rootDur := gaussianDuration(800, 200)
 	svcDur := gaussianDuration(700, 180)
 
@@ -741,11 +749,12 @@ func emitAuthMemoryLeak(ctx context.Context, st *serviceTracers, ts time.Time, a
 
 	svcSpan.End(trace.WithTimestamp(svcStart.Add(svcDur)))
 	rootSpan.End(trace.WithTimestamp(ts.Add(rootDur)))
+	return statusCode
 }
 
 // ── S6: Payment Provider Timeout — us-west-2 external API ───────────
 
-func emitPaymentTimeout(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue) {
+func emitPaymentTimeout(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue) int {
 	rootDur := gaussianDuration(5000, 500)
 	svcDur := gaussianDuration(4800, 450)
 
@@ -809,11 +818,12 @@ func emitPaymentTimeout(ctx context.Context, st *serviceTracers, ts time.Time, a
 
 	svcSpan.End(trace.WithTimestamp(svcStart.Add(svcDur)))
 	rootSpan.End(trace.WithTimestamp(ts.Add(rootDur)))
+	return 504
 }
 
 // ── S7: Umbrella EU Compliance — extra middleware latency ────────────
 
-func emitUmbrellaCompliance(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue, svc string) {
+func emitUmbrellaCompliance(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue, svc string) int {
 	overhead := gaussianDuration(150, 40)
 	baseDur := gaussianDuration(40, 20)
 	rootDur := baseDur + overhead
@@ -856,11 +866,12 @@ func emitUmbrellaCompliance(ctx context.Context, st *serviceTracers, ts time.Tim
 
 	svcSpan.End(trace.WithTimestamp(svcStart.Add(baseDur + overhead)))
 	rootSpan.End(trace.WithTimestamp(ts.Add(rootDur)))
+	return statusCode
 }
 
 // ── S8: Globex Batch Import — saturated Elasticsearch ───────────────
 
-func emitGlobexBatch(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue) {
+func emitGlobexBatch(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue) int {
 	rootDur := gaussianDuration(600, 120)
 	svcDur := gaussianDuration(500, 100)
 
@@ -898,11 +909,12 @@ func emitGlobexBatch(ctx context.Context, st *serviceTracers, ts time.Time, a tr
 
 	svcSpan.End(trace.WithTimestamp(svcStart.Add(svcDur)))
 	rootSpan.End(trace.WithTimestamp(ts.Add(rootDur)))
+	return 200
 }
 
 // ── Normal trace (healthy) ──────────────────────────────────────────
 
-func emitNormalTrace(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue, svc string) {
+func emitNormalTrace(ctx context.Context, st *serviceTracers, ts time.Time, a traceAttrs, common []attribute.KeyValue, svc string) int {
 	rootDur := gaussianDuration(40, 20)
 	svcDur := gaussianDuration(25, 12)
 	statusCode := pickNormalStatusCode()
@@ -989,6 +1001,7 @@ func emitNormalTrace(ctx context.Context, st *serviceTracers, ts time.Time, a tr
 
 	svcSpan.End(trace.WithTimestamp(svcStart.Add(svcDur)))
 	rootSpan.End(trace.WithTimestamp(ts.Add(rootDur)))
+	return statusCode
 }
 
 // ── Shared helpers for span construction ────────────────────────────

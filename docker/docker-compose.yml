@@ -17,7 +17,7 @@ services:
       - heatmap
 
   clickhouse-server:
-    image: clickhouse/clickhouse-server:latest-alpine
+    image: clickhouse/clickhouse-server@sha256:a4202d2f7a0c0ac98aca2bda670f5b7278722463c0bdd4c2de5241e8e1e898ed  # clickhouse/clickhouse-server:latest-alpine, resolved 2026-07-04 (latest moves)
     container_name: clickhouse-server
     ports:
       - "8123:8123"
@@ -40,7 +40,7 @@ services:
   otel-collector:
     # Pinned: the clickhouseexporter metrics config (metrics_tables block, default
     # otel_metrics_* table names) is verified against 0.155.0. Bump deliberately.
-    image: otel/opentelemetry-collector-contrib:0.155.0
+    image: otel/opentelemetry-collector-contrib@sha256:4935caa35e9a4cb387e35732e8fb22b2b5759af8d12e7043357f03837f6e8df5  # otel/opentelemetry-collector-contrib:0.155.0
     container_name: otel-collector
     command: ["--config=/etc/otel-collector-config.yml"]
     volumes:
