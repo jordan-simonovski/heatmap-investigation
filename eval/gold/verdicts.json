@@ -71,8 +71,8 @@
       "culprit_service": "order-service",
       "discriminating_attributes": [{ "key": "app.build_id", "value": "build-7a3" }]
     },
-    "expected_pass": true,
-    "note": "FIRST-PASS judgment call: rubric text says 'both platform and build_id should appear; identifying build-7a3 is required' — read as build_id being the hard requirement and platform a softer expectation. Needs human review to confirm platform omission shouldn't fail this."
+    "expected_pass": false,
+    "note": "HUMAN-REVIEWED (2026-07-04): the judge's strict reading is endorsed — the rubric requires BOTH platform=ios AND build_id, so a build_id-only answer that omits the iOS platform is incomplete and correctly fails. (Prior first-pass label was pass; corrected.)"
   },
   {
     "id": "S2-fail-platform-only",
@@ -129,8 +129,8 @@
       "culprit_service": "user-service",
       "discriminating_attributes": [{ "key": "host.region", "value": "ap-southeast-1" }]
     },
-    "expected_pass": true,
-    "note": "FIRST-PASS judgment call: rubric text is internally ambiguous — one sentence reads as an AND (region AND redis-mechanism required), a later sentence calls region 'the required, recoverable discriminator' and redis merely 'supporting... evidence once ap-southeast-1 is named'. Labeled pass here (region is the hard, recoverable part; redis is supporting) but flagged for human review to resolve the rubric's internal contradiction — may need a rubric wording fix, not just a judge fix."
+    "expected_pass": false,
+    "note": "HUMAN-REVIEWED (2026-07-04): the judge's strict reading is endorsed — a region-only answer that names neither the Redis/cache dependency nor the fallback mechanism is incomplete and correctly fails. (Prior first-pass label was pass; corrected.) KNOWN LIMITATION: the S3 rubric text is internally contradictory (AND vs 'redis supporting'); the judge resolved it consistently as AND. Rubric wording was NOT edited post-run to avoid changing scoring inputs after seeing results — flagged for a future iteration + re-run."
   },
   {
     "id": "S3-fail-wrong-service",
